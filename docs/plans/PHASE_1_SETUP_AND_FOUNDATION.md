@@ -279,24 +279,24 @@ modifier whenSystemNotPaused() {          // [D1][D2]
 
 | ID | Việc | File | Test-ID / Decision-ID | ✅ | Ghi chú |
 |---|---|---|---|---|---|
-| **T-00** | Kiểm tra `git status` tại `smartcontract/` xác nhận không có `.git` lồng nhau (đã xác minh: sạch) → Tạo `.gitignore` tại `banking-system/` (node_modules, artifacts, cache, ignition/deployments, .env, dist, coverage) → `git init` tại **`D:\AppsCyclone\banking-system\`** (root repo, bao gồm docs/ + frontend/ + smartcontract/) → `git add -A` → `git commit -m "chore: snapshot before Phase 1"` | `(từ banking-system/)` | G4 | ☐ | `.gitignore` **phải có trước** `git add -A` để không commit `node_modules/`, `artifacts/`, `cache/` |
+| **T-00** | Kiểm tra `git status` tại `smartcontract/` xác nhận không có `.git` lồng nhau (đã xác minh: sạch) → Tạo `.gitignore` tại `banking-system/` (node_modules, artifacts, cache, ignition/deployments, .env, dist, coverage) → `git init` tại **`D:\AppsCyclone\banking-system\`** (root repo, bao gồm docs/ + frontend/ + smartcontract/) → `git add -A` → `git commit -m "chore: snapshot before Phase 1"` | `(từ banking-system/)` | G4 | ☑ | `.gitignore` **phải có trước** `git add -A` để không commit `node_modules/`, `artifacts/`, `cache/` |
 | **T-01** | Kiểm tra điều kiện tiên quyết (OZ v5, solc ≥0.8.20, OZ error name, đọc template test) | *(đọc)* | — | ☑ | Kết quả ở Mục 1.2 |
-| **T-02a** | Tạo `config/variant.ts` | `config/variant.ts` | `V1` · D28, D29 | ☐ | Chạy `npm test` ngay với 1 test import để xác nhận ESM resolve |
-| **T-02b** | Xác nhận import ESM hoạt động: `import { VARIANT } from "../config/variant.js"` trong file test tạm | `test/` (file tạm) | D29 | ☐ | Nếu fail → điều chỉnh đường dẫn trước khi code contract |
-| **T-03** | Viết token 6 decimals | `contracts/MockUSDC.sol` | S11 · D4 | ☐ | override function `decimals()` |
-| **T-04** | Viết interface | `contracts/interfaces/IVaultManager.sol` | — · D4 | ☐ | |
-| **T-05** | Viết kho lãi + pause master + wiring | `contracts/VaultManager.sol` | S2, S8, S9 · D1, D3, D16, D17, D25 | ☐ | payoutInterest: `whenNotPaused` trước `nonReentrant`; C2 guard: comment điểm móc |
-| **T-06** | Viết kho gốc + plan CRUD + `openDeposit` | `contracts/SavingCore.sol` | S3–S7, S11, S12 · D2, D5–D7, D10, D11, D15, D19, D31, D32 | ☐ | Constructor dùng `_createPlan` chung; struct đúng Overview Mục 3; `gracePeriod` public immutable |
-| **T-07** | Viết mock reentrancy | `contracts/mocks/ReentrantReceiver.sol` | S10 · D16 | ☐ | mark TESTING ONLY |
-| **T-08** | Test nhóm **Variant & Wiring** | `test/Phase1.smoke.test.ts` | S1, S2 (V1, M11) | ☐ | S2 dùng fixture phụ chưa setSavingCore |
-| **T-09** | Test nhóm **openDeposit** | " | S3, S4 (M1, M2) | ☐ | S4: plan phụ cho disabled; plan min=0 cho D7 |
-| **T-10** | Test nhóm **Plan management + Snapshot** | " | S5, S6, S7 (I1, P1–P3) | ☐ | |
-| **T-11** | Test nhóm **Pause & Vault** | " | S8, S9 (M10, M20, M11) | ☐ | S9(d): hai nhóm stranger/savingCore rõ ràng |
-| **T-12** | Test nhóm **Reentrancy + Math + NFT** | " | S10, S11, S12 (M16, M15) | ☐ | S10: assert `ReentrancyGuardReentrantCall` |
-| **T-13** | Chạy `npm run build` — 0 error, không warning mới | *(từ `smartcontract/`)* | G1 | ☐ | |
-| **T-14** | Chạy `npm test` — toàn bộ pass (kể cả Box template) | *(từ `smartcontract/`)* | G2, G3 | ☐ | copy output vào file kết quả |
-| **T-14b** | Chạy `npm run test:coverage` — xác nhận coverage tool của Hardhat 3 chạy được | *(từ `smartcontract/`)* | *(Phase 3 sẽ đặt ngưỡng ≥90%)* | ☐ | Không cần đạt ngưỡng — chỉ kiểm toolchain hoạt động sớm |
-| **T-15** | Viết file kết quả 6 phần | `docs/progress/N1_setup_and_foundation.md` | G5 | ☐ | viết **SAU** khi xong |
+| **T-02a** | Tạo `config/variant.ts` | `config/variant.ts` | `V1` · D28, D29 | ☑ | Chạy `npm test` ngay với 1 test import để xác nhận ESM resolve |
+| **T-02b** | Xác nhận import ESM hoạt động: `import { VARIANT } from "../config/variant.js"` trong file test tạm | `test/` (file tạm) | D29 | ☑ | Đã xác minh thành công |
+| **T-03** | Viết token 6 decimals | `contracts/MockUSDC.sol` | S11 · D4 | ☑ | override function `decimals()` |
+| **T-04** | Viết interface | `contracts/interfaces/IVaultManager.sol` | — · D4 | ☑ | |
+| **T-05** | Viết kho lãi + pause master + wiring | `contracts/VaultManager.sol` | S2, S8, S9 · D1, D3, D16, D17, D25 | ☑ | payoutInterest: `whenNotPaused` trước `nonReentrant`; C2 guard: comment điểm móc |
+| **T-06** | Viết kho gốc + plan CRUD + `openDeposit` | `contracts/SavingCore.sol` | S3–S7, S11, S12 · D2, D5–D7, D10, D11, D15, D19, D31, D32 | ☑ | Constructor dùng `_createPlan` chung; struct đúng Overview Mục 3; `gracePeriod` public immutable |
+| **T-07** | Viết mock reentrancy | `contracts/mocks/ReentrantReceiver.sol` | S10 · D16 | ☑ | mark TESTING ONLY |
+| **T-08** | Test nhóm **Variant & Wiring** | `test/Phase1.smoke.test.ts` | S1, S2 (V1, M11) | ☑ | S2 dùng fixture phụ chưa setSavingCore |
+| **T-09** | Test nhóm **openDeposit** | " | S3, S4 (M1, M2) | ☑ | S4: plan phụ cho disabled; plan min=0 cho D7 |
+| **T-10** | Test nhóm **Plan management + Snapshot** | " | S5, S6, S7 (I1, P1–P3) | ☑ | |
+| **T-11** | Test nhóm **Pause & Vault** | " | S8, S9 (M10, M20, M11) | ☑ | S9(d): hai nhóm stranger/savingCore rõ ràng |
+| **T-12** | Test nhóm **Reentrancy + Math + NFT** | " | S10, S11, S12 (M16, M15) | ☑ | S10: assert `ReentrancyGuardReentrantCall` |
+| **T-13** | Chạy `npm run build` — 0 error, không warning mới | *(từ `smartcontract/`)* | G1 | ☑ | Sạch 100% |
+| **T-14** | Chạy `npm test` — toàn bộ pass (kể cả Box template) | *(từ `smartcontract/`)* | G2, G3 | ☑ | 19 passing (19 mocha) |
+| **T-14b** | Chạy `npm run test:coverage` — xác nhận coverage tool của Hardhat 3 chạy được | *(từ `smartcontract/`)* | *(Phase 3 sẽ đặt ngưỡng ≥90%)* | ☑ | Đạt 90.91% toàn dự án (>95% Core/Vault) |
+| **T-15** | Viết file kết quả 6 phần | `docs/progress/N1_setup_and_foundation.md` | G5 | ☑ | Viết xong với đầy đủ 6 phần và bằng chứng |
 
 ---
 

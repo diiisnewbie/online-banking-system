@@ -1,23 +1,70 @@
+# Dependencies & Package Managers
 node_modules/
-artifacts/
-cache/
-dist/
-coverage/
-.coverage/
-typechain-types/
-types/
+.pnp
+.pnp.js
 
-# Ignition deployments & cache
-ignition/deployments/
-ignition/cache/
+# Progress tracking (không đưa lên Git theo yêu cầu)
+docs/progress/
+**/progress/
 
-# Environment files
+# Secrets & Sensitive Info (BẢO MẬT -- TUYỆT ĐỐI KHÔNG COMMIT)
 .env
 .env.*
 !.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+*.pkcs12
+*.cert
+*.crt
+secrets.json
+*secret*
+*credential*
+*private_key*
+*mnemonic*
+jwt*
+authToken*
+session*
+id_rsa*
+id_ecdsa*
+id_ed25519*
 
-# IDE & OS
+# Build artifacts & Compilers
+artifacts/
+cache/
+dist/
+build/
+out/
+typechain-types/
+types/
+
+# Testing & Coverage
+coverage/
+.coverage/
+coverage.json
+*.lcov
+
+# Ignition deployments & OpenZeppelin manifests
+ignition/deployments/
+ignition/cache/
+.openzeppelin/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# IDE & OS junk
 .vscode/
 .idea/
+*.swp
+*.swo
+*~
 .DS_Store
 Thumbs.db
+desktop.ini
+ehthumbs.db
+
