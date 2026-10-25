@@ -1,0 +1,34 @@
+node_modules
+*.log
+
+# Secrets — KHÔNG BAO GIỜ commit
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.p12
+*.keystore
+secrets.json
+
+# OS junk
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Hardhat files
+/artifacts
+/cache
+
+# TypeChain files
+/types
+
+# solidity-coverage files
+/coverage
+/coverage.json
+
+# Hardhat Ignition default folder for deployments against a local node
+ignition/deployments/chain-31337
+
+# OpenZeppelin upgrades manifest (network thật; dev network ghi vào OS temp)
+.openzeppelin/

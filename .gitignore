@@ -1,0 +1,23 @@
+node_modules/
+artifacts/
+cache/
+dist/
+coverage/
+.coverage/
+typechain-types/
+types/
+
+# Ignition deployments & cache
+ignition/deployments/
+ignition/cache/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
