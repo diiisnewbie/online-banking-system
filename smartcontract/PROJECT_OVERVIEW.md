@@ -1,8 +1,8 @@
-# PROJECT OVERVIEW v2.1 — ON-CHAIN TERM DEPOSIT SYSTEM (ONLINE BANKING)
+# PROJECT OVERVIEW v2.2 — ON-CHAIN TERM DEPOSIT SYSTEM (ONLINE BANKING)
 
 > **Document Purpose**: Tài liệu quy chuẩn kỹ thuật và nghiệp vụ tổng thể (Single Source of Truth) cho lập trình viên, mô hình AI và **kỳ bảo vệ đồ án**. Mô tả kiến trúc, 5 luồng nghiệp vụ, công thức toán học, các quyết định thiết kế đã chốt (D1–D32), Test Matrix, bảng API và lộ trình thực thi.
 >
-> **Phiên bản:** v2.1 (2026-10-25) — thay thế v1 (lưu tại `docs/archive/PROJECT_OVERVIEW_v1.md`); v2.1 sửa theo review vòng 1 (video 3–5', đổi đánh dấu ngày sang **N1–N5**, `totalCommittedInterest` chuyển về `SavingCore`, bổ sung nhóm test P/I, seed 3 gói, `updatePlan` đúng đề, bảng API + custom errors).
+> **Phiên bản:** v2.2 (2026-10-26) — đồng bộ sau khi hoàn thành Phase 3: chuẩn hóa mô tả M5 (`DepositNotActive`), I1 (chỉ hạ APR), đồng bộ view `getCertificatesOfOwner(address account)` và `getAllPlans()`, script xuất ABI `scripts/export-abi.js`, ghim Tailwind v3 (`^3.4.17`), loại bỏ alias `variant.ts` (Frontend độc lập đọc 100% on-chain).
 > **Nguồn:** v1 + `CHANGES_REVIEW` (A1–A9, B10–B20, C21–C27) + các review bổ sung + quyết định đã xác nhận (Mục 15).
 > **Quy ước chú thích:** `[Dn]` = Decision ID (Mục 15) · `[Qn]` = Oral Defense Question (Mục 8) · `[Mn]`/`[ARn]` = Test ID (Mục 10) · **`N1–N5` = 5 ngày thực thi** (khác hẳn `[Dn]`).
 
@@ -485,7 +485,7 @@ banking-system/
 | **M2** | open | planId sai / disabled / `amount=0` / `<min` / `>max` | revert đúng custom error | N3 | D5,D7 |
 | **M3** | maturity | Rút đúng hạn 1,000 USDC | lãi = **5,547,945** units, balance đúng 2 phía | N3 | — |
 | **M4** | maturity | Biên thời gian: đúng giây `maturityAt`, trước 1 giây, sau grace | `>=` tính đúng hạn; trước → `NotMatured`; sau grace vẫn rút được | N3 | D20 |
-| **M5** | early | Rút sớm trước đáo hạn; sau đáo hạn gọi lại | phạt 50 USDC → feeReceiver, user 950, `isEarly=true`, `principal` gốc; lần 2 → `AlreadyMatured` | N3 | D17,D18 |
+| **M5** | early | Rút sớm trước đáo hạn; sau đáo hạn gọi lại | phạt 50 USDC → feeReceiver, user 950, `isEarly=true`, `principal` gốc; lần 2 → `DepositNotActive` | N3 | D17,D18 |
 | **M6** | renew | Manual renew hợp lệ | old=`ManualRenewed`, new cert forward-dated, APR theo plan mới | N3 | D12,D14 |
 | **M7** | maturity | **C1: vault thiếu khi rút đúng hạn** | **gốc 100% về user, `unpaidInterest` tăng, `InterestDeferred` emit** *(N3: ghi nhận nhánh revert base → N4 chuyển đổi thành đây)* `[D27]` | N4 | D22 |
 | **M8** | claim | `claimPendingInterest` all-or-nothing | thiếu → `ClaimNotCovered`; đủ → trả trọn, trừ committed; transfer NFT → chủ mới claim được | N4 | D23 |
@@ -502,7 +502,7 @@ banking-system/
 | **M19** | early | **Plan có `penaltyBps = 0`** → early withdraw | user nhận đủ 100% gốc, **không** transfer sang feeReceiver, không `PenaltyCharged` | N3 | D17 |
 | **M20** | admin | `setFeeReceiver(address(0))` → revert; set ví khác hợp lệ | `ZeroAddress`; penalty chảy về ví mới ở lần early tiếp theo | N3 | D17 |
 | **M21** | pause | **`unpause()`** sau pause | mọi luồng user chạy lại bình thường | N3 | D1 |
-| **I1** | **Snapshot** | **Admin hạ APR (và phạt) SAU khi user đã mở** | `withdrawAtMaturity`/`renew` vẫn dùng **APR/phạt cũ** (`aprBpsAtOpen`) — invariant 15 điểm | N3 | D11,Q6 |
+| **I1** | **Snapshot** | **Admin hạ APR SAU khi user đã mở** | `withdrawAtMaturity`/`renew` vẫn dùng **APR cũ** (`aprBpsAtOpen`) — invariant 15 điểm | N3 | D11,Q6 |
 | **I2** | C2 | Sau `openDeposit`: cam kết tăng đúng `_calcInterest` | `totalCommittedInterest` == lãi toàn kỳ của cert vừa mở | N4 | D25,D30 |
 | **I3** | **Invariant** | Sau chuỗi `open → early → renew → withdraw`: `usdc.balanceOf(SavingCore)` | **== Σ `principal` của mọi deposit `Active`** (bằng đúng, không sai 1 wei) | N4 | INV |
 | **AR1** | auto | Auto-renew hợp lệ (qua grace, vault đủ) | backdate `startAt=oldMaturityAt`, APR/phạt khóa cũ, `_mint` | N3 | D21,D15 |
@@ -648,6 +648,7 @@ banking-system/
 ```
 getCertificate(depositId) → DepositCertificate
 getAllPlans() → SavingPlan[]                 // frontend đọc số liệu plan từ CHAIN [D29]
+getCertificatesOfOwner(address account) → DepositCertificate[] // view tiện ích gom toàn bộ cert của ví (0 warning)
 unpaidInterest(depositId) → uint256
 totalCommittedInterest() → uint256
 gracePeriod() → uint256

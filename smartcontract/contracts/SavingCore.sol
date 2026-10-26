@@ -17,22 +17,22 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
 
     struct SavingPlan {
         uint256 planId;
-        uint256 tenorDays;                // K? h?n (7, 30, 90, 180, 365 ngày...)
-        uint256 aprBps;                   // Lãi su?t nam (1 bps = 0.01%; 225 bps = 2.25%)
-        uint256 minDeposit;               // T?i thi?u (0 = không gi?i h?n)
-        uint256 maxDeposit;               // T?i da (0 = không gi?i h?n)
-        uint256 earlyWithdrawPenaltyBps;  // Ph?t rút s?m (500 bps = 5.00%)
-        bool enabled;                     // Nh?n kho?n g?i m?i?
+        uint256 tenorDays;                // Ky han (7, 30, 90, 180, 365 ngay...)
+        uint256 aprBps;                   // Lai suat nam (1 bps = 0.01%; 225 bps = 2.25%)
+        uint256 minDeposit;               // Toi thieu (0 = khong gioi han)
+        uint256 maxDeposit;               // Toi da (0 = khong gioi han)
+        uint256 earlyWithdrawPenaltyBps;  // Phat rut som (500 bps = 5.00%)
+        bool enabled;                     // Nhan khoan goi moi?
     }
 
     struct DepositCertificate {
-        uint256 depositId;                // Token ID c?a ERC-721 NFT
+        uint256 depositId;                // Token ID cua ERC-721 NFT
         uint256 planId;
-        uint256 principal;                // Ti?n g?c (6 decimals)
-        uint256 startAt;                  // block.timestamp b?t d?u
+        uint256 principal;                // Tien goc (6 decimals)
+        uint256 startAt;                  // block.timestamp bat dau
         uint256 maturityAt;               // startAt + tenorSeconds
-        uint256 aprBpsAtOpen;             // Snapshot APR (B?T BI?N)
-        uint256 penaltyBpsAtOpen;         // Snapshot phí ph?t (B?T BI?N)
+        uint256 aprBpsAtOpen;             // Snapshot APR (BAT BIEN)
+        uint256 penaltyBpsAtOpen;         // Snapshot phi phat (BAT BIEN)
         DepositStatus status;
     }
 
@@ -44,6 +44,12 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
     error SystemPaused();
     error ZeroAddress();
     error DepositNotFound(uint256 depositId);
+    error NotDepositOwner();
+    error DepositNotActive();
+    error NotMatured();
+    error AlreadyMatured();
+    // Declared in SavingCore to decode ABI when bubbling up from VaultManager.payoutInterest:
+    error InsufficientVaultLiquidity();
 
     // --- Events ---
     event PlanCreated(uint256 indexed planId, uint256 tenorDays, uint256 aprBps);
@@ -57,6 +63,24 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
         uint256 aprBpsAtOpen
     );
     event PlanToggled(uint256 indexed planId, bool enabled);
+    event Withdrawn(
+        uint256 indexed depositId,
+        address indexed owner,
+        uint256 principal,
+        uint256 interest,
+        bool isEarly
+    );
+    event Renewed(
+        uint256 indexed oldDepositId,
+        uint256 indexed newDepositId,
+        uint256 newPrincipal,
+        uint256 newPlanId
+    );
+    event PenaltyCharged(
+        uint256 indexed depositId,
+        address indexed receiver,
+        uint256 penalty
+    );
 
     // --- State Variables ---
     IERC20 public immutable usdc;
@@ -175,6 +199,125 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
         _safeMint(msg.sender, depositId);
     }
 
+    function withdrawAtMaturity(uint256 depositId) external whenSystemNotPaused nonReentrant {
+        if (depositId == 0 || depositId >= nextDepositId) revert DepositNotFound(depositId);
+        if (ownerOf(depositId) != msg.sender) revert NotDepositOwner();
+
+        DepositCertificate storage cert = certificates[depositId];
+        if (cert.status != DepositStatus.Active) revert DepositNotActive();
+        if (block.timestamp < cert.maturityAt) revert NotMatured();
+
+        cert.status = DepositStatus.Withdrawn;
+
+        uint256 principal = cert.principal;
+        uint256 interest = _calcInterest(principal, cert.aprBpsAtOpen, cert.maturityAt - cert.startAt);
+
+        emit Withdrawn(depositId, msg.sender, principal, interest, false);
+
+        usdc.safeTransfer(msg.sender, principal);
+        vault.payoutInterest(msg.sender, interest);
+    }
+
+    function earlyWithdraw(uint256 depositId) external whenSystemNotPaused nonReentrant {
+        if (depositId == 0 || depositId >= nextDepositId) revert DepositNotFound(depositId);
+        if (ownerOf(depositId) != msg.sender) revert NotDepositOwner();
+
+        DepositCertificate storage cert = certificates[depositId];
+        if (cert.status != DepositStatus.Active) revert DepositNotActive();
+        if (block.timestamp >= cert.maturityAt) revert AlreadyMatured();
+
+        cert.status = DepositStatus.Withdrawn;
+
+        uint256 principal = cert.principal;
+        uint256 penalty = (principal * cert.penaltyBpsAtOpen) / 10000;
+        uint256 amountToUser = principal - penalty;
+
+        if (penalty > 0) {
+            address receiver = vault.feeReceiver();
+            emit PenaltyCharged(depositId, receiver, penalty);
+            usdc.safeTransfer(receiver, penalty);
+        }
+
+        emit Withdrawn(depositId, msg.sender, principal, 0, true);
+        usdc.safeTransfer(msg.sender, amountToUser);
+    }
+
+    function renewDeposit(uint256 oldDepositId, uint256 newPlanId) external whenSystemNotPaused nonReentrant returns (uint256 newDepositId) {
+        if (oldDepositId == 0 || oldDepositId >= nextDepositId) revert DepositNotFound(oldDepositId);
+        if (ownerOf(oldDepositId) != msg.sender) revert NotDepositOwner();
+
+        DepositCertificate storage oldCert = certificates[oldDepositId];
+        if (oldCert.status != DepositStatus.Active) revert DepositNotActive();
+        if (block.timestamp < oldCert.maturityAt) revert NotMatured();
+
+        if (newPlanId >= planCount) revert PlanNotFound(newPlanId);
+        SavingPlan storage newPlan = plans[newPlanId];
+        if (!newPlan.enabled) revert PlanDisabled();
+
+        uint256 oldInterest = _calcInterest(oldCert.principal, oldCert.aprBpsAtOpen, oldCert.maturityAt - oldCert.startAt);
+        uint256 newPrincipal = oldCert.principal + oldInterest;
+
+        if (newPlan.minDeposit > 0 && newPrincipal < newPlan.minDeposit) revert InvalidDepositAmount();
+        if (newPlan.maxDeposit > 0 && newPrincipal > newPlan.maxDeposit) revert InvalidDepositAmount();
+
+        oldCert.status = DepositStatus.ManualRenewed;
+
+        newDepositId = nextDepositId++;
+        uint256 newMaturityAt = block.timestamp + newPlan.tenorDays * 1 days;
+
+        certificates[newDepositId] = DepositCertificate({
+            depositId: newDepositId,
+            planId: newPlanId,
+            principal: newPrincipal,
+            startAt: block.timestamp,
+            maturityAt: newMaturityAt,
+            aprBpsAtOpen: newPlan.aprBps,
+            penaltyBpsAtOpen: newPlan.earlyWithdrawPenaltyBps,
+            status: DepositStatus.Active
+        });
+
+        emit Renewed(oldDepositId, newDepositId, newPrincipal, newPlanId);
+
+        vault.payoutInterest(address(this), oldInterest);
+        _safeMint(msg.sender, newDepositId);
+    }
+
+    function autoRenewDeposit(uint256 oldDepositId) external whenSystemNotPaused nonReentrant returns (uint256 newDepositId) {
+        if (oldDepositId == 0 || oldDepositId >= nextDepositId) revert DepositNotFound(oldDepositId);
+
+        DepositCertificate storage oldCert = certificates[oldDepositId];
+        if (oldCert.status != DepositStatus.Active) revert DepositNotActive();
+        if (block.timestamp < oldCert.maturityAt + gracePeriod) revert NotMatured();
+
+        uint256 oldTenor = oldCert.maturityAt - oldCert.startAt;
+        uint256 oldInterest = _calcInterest(oldCert.principal, oldCert.aprBpsAtOpen, oldTenor);
+        uint256 newPrincipal = oldCert.principal + oldInterest;
+
+        address owner = ownerOf(oldDepositId);
+
+        oldCert.status = DepositStatus.AutoRenewed;
+
+        newDepositId = nextDepositId++;
+        uint256 newStartAt = oldCert.maturityAt;
+        uint256 newMaturityAt = oldCert.maturityAt + oldTenor;
+
+        certificates[newDepositId] = DepositCertificate({
+            depositId: newDepositId,
+            planId: oldCert.planId,
+            principal: newPrincipal,
+            startAt: newStartAt,
+            maturityAt: newMaturityAt,
+            aprBpsAtOpen: oldCert.aprBpsAtOpen,
+            penaltyBpsAtOpen: oldCert.penaltyBpsAtOpen,
+            status: DepositStatus.Active
+        });
+
+        emit Renewed(oldDepositId, newDepositId, newPrincipal, oldCert.planId);
+
+        vault.payoutInterest(address(this), oldInterest);
+        _mint(owner, newDepositId);
+    }
+
     function _calcInterest(uint256 principal, uint256 aprBps, uint256 tenorSeconds) internal pure returns (uint256) {
         return (principal * aprBps * tenorSeconds) / (365 days * 10000);
     }
@@ -193,5 +336,26 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
     function getCertificate(uint256 depositId) external view returns (DepositCertificate memory) {
         if (depositId == 0 || depositId >= nextDepositId) revert DepositNotFound(depositId);
         return certificates[depositId];
+    }
+
+    /// @notice Tra ve toan bo danh sach cac goi tiet kiem de Frontend doc on-chain [D29]
+    /// @dev Trade-off: Khong phan trang, phu hop quy mo demo/do an. Production nen dung indexer hoac phan trang.
+    function getAllPlans() external view returns (SavingPlan[] memory allPlans) {
+        allPlans = new SavingPlan[](planCount);
+        for (uint256 i = 0; i < planCount; i++) {
+            allPlans[i] = plans[i];
+        }
+    }
+
+    /// @notice Tra ve toan bo cac chung chi thuoc so huu cua mot dia chi vi
+    /// @dev Doi ten tham so thanh account de tranh shadow ham owner() cua Ownable.
+    /// Tra ve ca cert da Withdrawn/Renewed (D8 khong burn NFT); Frontend se loc theo cert.status == Active.
+    function getCertificatesOfOwner(address account) external view returns (DepositCertificate[] memory certs) {
+        uint256 count = balanceOf(account);
+        certs = new DepositCertificate[](count);
+        for (uint256 i = 0; i < count; i++) {
+            uint256 depositId = tokenOfOwnerByIndex(account, i);
+            certs[i] = certificates[depositId];
+        }
     }
 }

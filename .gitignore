@@ -38,6 +38,7 @@ build/
 out/
 typechain-types/
 types/
+*.tsbuildinfo
 
 # Testing & Coverage
 coverage/
