@@ -21,6 +21,7 @@ interface AdminPanelProps {
   vault: ethers.Contract | null;
   usdc: ethers.Contract | null;
   account: string | null;
+  refreshTrigger?: number;
   onSuccess: () => Promise<void>;
 }
 
@@ -29,6 +30,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   vault,
   usdc,
   account,
+  refreshTrigger,
   onSuccess,
 }) => {
   const [coreOwner, setCoreOwner] = useState<string | null>(null);
@@ -77,7 +79,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   useEffect(() => {
     loadAdminData();
-  }, [savingCore, vault, usdc, account]);
+  }, [savingCore, vault, usdc, account, refreshTrigger]);
 
   const isUserCoreOwner =
     account && coreOwner && account.toLowerCase() === coreOwner.toLowerCase();

@@ -1,14 +1,16 @@
-import React from 'react';
-import { Wallet, Clock, Activity } from 'lucide-react';
-import { formatTimestamp } from '../utils/formatters';
+import React, { useState } from 'react';
+import { Wallet, Activity, FastForward, RefreshCw, Coins } from 'lucide-react';
+import { formatTimestamp, formatUnits6 } from '../utils/formatters';
 
 interface NavbarProps {
   account: string | null;
   chainId: number | null;
   isConnecting: boolean;
   currentSimulatedTime: bigint;
+  userBalance?: bigint | null;
   onConnect: () => void;
   onOpenTimeTravel?: () => void;
+  onRefreshAll?: () => Promise<void>;
 }
 
 export const Navbar: React.FC<NavbarProps> = ({
@@ -16,10 +18,25 @@ export const Navbar: React.FC<NavbarProps> = ({
   chainId,
   isConnecting,
   currentSimulatedTime,
+  userBalance,
   onConnect,
   onOpenTimeTravel,
+  onRefreshAll,
 }) => {
   const isHardhat = chainId === 31337;
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async (e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (onRefreshAll && !isRefreshing) {
+      setIsRefreshing(true);
+      try {
+        await onRefreshAll();
+      } finally {
+        setTimeout(() => setIsRefreshing(false), 500);
+      }
+    }
+  };
 
   return (
     <header className="border-b border-slate-800 bg-slate-900/80 backdrop-blur sticky top-0 z-40">
@@ -40,16 +57,32 @@ export const Navbar: React.FC<NavbarProps> = ({
         </div>
 
         {/* Time & Network & Wallet info */}
-        <div className="flex items-center space-x-3 sm:space-x-4">
-          {/* EVM Simulated Clock */}
-          <div
-            onClick={onOpenTimeTravel}
-            title="Nhấn để mở công cụ tua thời gian (Dev-Only)"
-            className="hidden md:flex items-center space-x-2 bg-slate-800/80 hover:bg-slate-700/80 border border-slate-700 px-3 py-1.5 rounded-lg cursor-pointer transition text-xs font-mono text-slate-300"
-          >
-            <Clock className="w-3.5 h-3.5 text-indigo-400" />
-            <span>{formatTimestamp(currentSimulatedTime)}</span>
-          </div>
+        <div className="flex items-center space-x-2 sm:space-x-3">
+          {/* EVM Simulated Clock & Time-Travel Button */}
+          {isHardhat && (
+            <div className="flex items-center space-x-1.5">
+              <button
+                onClick={onOpenTimeTravel}
+                title="Nhấn để mở công cụ tua nhanh thời gian EVM (Dev Tool)"
+                className="flex items-center space-x-1.5 bg-indigo-950/70 hover:bg-indigo-900/80 border border-indigo-700/60 px-2.5 py-1.5 rounded-lg cursor-pointer transition text-xs font-mono text-indigo-300 shadow-sm"
+              >
+                <FastForward className="w-3.5 h-3.5 text-indigo-400" />
+                <span className="hidden sm:inline font-semibold">Tua Thời Gian:</span>
+                <span className="text-white">{formatTimestamp(currentSimulatedTime)}</span>
+              </button>
+
+              {onRefreshAll && (
+                <button
+                  onClick={handleManualRefresh}
+                  disabled={isRefreshing}
+                  title="Đồng bộ lại thời gian và làm mới toàn bộ dữ liệu on-chain"
+                  className="p-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg border border-slate-700 transition"
+                >
+                  <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-indigo-400' : ''}`} />
+                </button>
+              )}
+            </div>
+          )}
 
           {/* Network Badge */}
           {account && (
@@ -60,6 +93,17 @@ export const Navbar: React.FC<NavbarProps> = ({
               <span className={isHardhat ? 'text-slate-200' : 'text-amber-300'}>
                 {isHardhat ? 'Hardhat 31337' : `Chain: ${chainId ?? 'Unknown'}`}
               </span>
+            </div>
+          )}
+
+          {/* User Balance Badge */}
+          {account && userBalance !== undefined && userBalance !== null && (
+            <div
+              title="Số dư ví MockUSDC cá nhân"
+              className="hidden sm:flex items-center space-x-1.5 bg-emerald-950/60 border border-emerald-500/40 px-2.5 py-1.5 rounded-lg text-xs font-mono text-emerald-300 shadow-sm"
+            >
+              <Coins className="w-3.5 h-3.5 text-emerald-400" />
+              <span className="font-bold">{formatUnits6(userBalance)} USDC</span>
             </div>
           )}
 

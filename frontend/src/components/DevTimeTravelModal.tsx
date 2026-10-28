@@ -6,7 +6,7 @@ interface DevTimeTravelModalProps {
   isOpen: boolean;
   onClose: () => void;
   chainId: number | null;
-  onSuccess: () => Promise<void>;
+  onSuccess: (newBlockTimestamp?: bigint) => Promise<void>;
 }
 
 const LOCAL_RPC_URL = import.meta.env.VITE_RPC_URL || 'http://127.0.0.1:8545';
@@ -34,13 +34,21 @@ export const DevTimeTravelModal: React.FC<DevTimeTravelModalProps> = ({
       const devProvider = new ethers.JsonRpcProvider(LOCAL_RPC_URL);
       await devProvider.send('evm_increaseTime', [seconds]);
       await devProvider.send('evm_mine', []);
-      await onSuccess();
+
+      // Lấy ngay block timestamp mới nhất vừa mine để update UI lập tức
+      const latestBlock = await devProvider.getBlock('latest');
+      if (latestBlock) {
+        await onSuccess(BigInt(latestBlock.timestamp));
+      } else {
+        await onSuccess();
+      }
+
       const days = (seconds / 86400).toFixed(1);
       setStatusMsg(`Đã tua nhanh thành công ${days} ngày!`);
       setTimeout(() => {
         setStatusMsg(null);
         onClose();
-      }, 1200);
+      }, 1000);
     } catch (err: any) {
       console.error('Time travel failed:', err);
       setStatusMsg('Lỗi tua thời gian: ' + (err?.message || 'EVM RPC failed'));
@@ -87,7 +95,7 @@ export const DevTimeTravelModal: React.FC<DevTimeTravelModalProps> = ({
           <label className="text-xs font-semibold text-slate-300">Mốc tua nhanh định sẵn:</label>
           <div className="grid grid-cols-2 gap-2">
             <button
-              onClick={() => travelTime(86400)}
+              onClick={() => travelTime(86400 + 10)}
               disabled={isSubmitting}
               className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium border border-slate-700 transition flex items-center justify-center space-x-1.5"
             >
@@ -95,31 +103,31 @@ export const DevTimeTravelModal: React.FC<DevTimeTravelModalProps> = ({
               <span>+1 Ngày (86,400s)</span>
             </button>
             <button
-              onClick={() => travelTime(259200)}
+              onClick={() => travelTime(259200 + 10)}
               disabled={isSubmitting}
               className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium border border-slate-700 transition flex items-center justify-center space-x-1.5"
             >
               <Clock className="w-3.5 h-3.5 text-amber-400" />
-              <span>+3 Ngày (Grace)</span>
+              <span>+3 Ngày (Hết Grace)</span>
             </button>
             <button
-              onClick={() => travelTime(30 * 86400)}
+              onClick={() => travelTime(30 * 86400 + 10)}
               disabled={isSubmitting}
               className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium border border-slate-700 transition flex items-center justify-center space-x-1.5"
             >
               <Clock className="w-3.5 h-3.5 text-indigo-400" />
-              <span>+30 Ngày (Plan 1)</span>
+              <span>+30 Ngày (Plan 1 Đáo hạn)</span>
             </button>
             <button
-              onClick={() => travelTime(90 * 86400)}
+              onClick={() => travelTime(90 * 86400 + 10)}
               disabled={isSubmitting}
               className="p-2.5 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-lg text-xs font-medium border border-slate-700 transition flex items-center justify-center space-x-1.5"
             >
-              <Clock className="w-3.5 h-3.5 text-indigo-400" />
+              <Clock className="w-3.5 h-3.5 text-emerald-400" />
               <span>+90 Ngày (Plan 0 Đáo hạn)</span>
             </button>
             <button
-              onClick={() => travelTime(100 * 86400)}
+              onClick={() => travelTime(100 * 86400 + 10)}
               disabled={isSubmitting}
               className="col-span-2 p-2.5 bg-indigo-950/60 hover:bg-indigo-900/60 text-indigo-200 rounded-lg text-xs font-medium border border-indigo-700/50 transition flex items-center justify-center space-x-1.5"
             >
@@ -144,7 +152,7 @@ export const DevTimeTravelModal: React.FC<DevTimeTravelModalProps> = ({
             <button
               onClick={() => {
                 const days = parseFloat(customDays);
-                if (days > 0) travelTime(Math.round(days * 86400));
+                if (days > 0) travelTime(Math.round(days * 86400) + 10);
               }}
               disabled={isSubmitting || !customDays}
               className="px-4 py-1.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition"

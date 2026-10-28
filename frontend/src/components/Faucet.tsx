@@ -6,10 +6,12 @@ import { formatUnits6 } from '../utils/formatters';
 interface FaucetProps {
   account: string | null;
   usdcContract: ethers.Contract | null;
+  balance?: bigint | null;
+  onMintSuccess?: () => Promise<void>;
 }
 
-export const Faucet: React.FC<FaucetProps> = ({ account, usdcContract }) => {
-  const [balance, setBalance] = useState<bigint | null>(null);
+export const Faucet: React.FC<FaucetProps> = ({ account, usdcContract, balance, onMintSuccess }) => {
+  const [localBalance, setLocalBalance] = useState<bigint | null>(null);
   const [isMinting, setIsMinting] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
@@ -17,15 +19,19 @@ export const Faucet: React.FC<FaucetProps> = ({ account, usdcContract }) => {
     if (!account || !usdcContract) return;
     try {
       const bal = await usdcContract.balanceOf(account);
-      setBalance(BigInt(bal));
+      setLocalBalance(BigInt(bal));
     } catch (err) {
       console.warn('Lỗi đọc số dư USDC:', err);
     }
   }, [account, usdcContract]);
 
   useEffect(() => {
-    fetchBalance();
-  }, [fetchBalance]);
+    if (balance === undefined) {
+      fetchBalance();
+    }
+  }, [fetchBalance, balance]);
+
+  const effectiveBalance = balance !== undefined ? balance : localBalance;
 
   const handleMint = async () => {
     if (!account || !usdcContract) return;
@@ -35,7 +41,11 @@ export const Faucet: React.FC<FaucetProps> = ({ account, usdcContract }) => {
       const tx = await usdcContract.mint(account, 1_000_000_000n); // 1,000 USDC
       await tx.wait();
       setMsg('Đã nhận thành công 1,000 USDC!');
-      await fetchBalance();
+      if (onMintSuccess) {
+        await onMintSuccess();
+      } else {
+        await fetchBalance();
+      }
     } catch (err: any) {
       console.error('Faucet mint failed:', err);
       setMsg('Lỗi khi mint USDC test: ' + (err?.reason || err?.message));
@@ -55,7 +65,7 @@ export const Faucet: React.FC<FaucetProps> = ({ account, usdcContract }) => {
         <div>
           <div className="text-xs text-slate-400">Số dư ví cá nhân (MockUSDC)</div>
           <div className="text-lg font-bold text-white font-mono">
-            {balance !== null ? `${formatUnits6(balance)} USDC` : '--'}
+            {effectiveBalance !== null ? `${formatUnits6(effectiveBalance)} USDC` : '--'}
           </div>
         </div>
       </div>

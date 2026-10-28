@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useWeb3 } from './hooks/useWeb3';
 import { useBankingContracts } from './hooks/useBankingContracts';
 import { usePlans } from './hooks/usePlans';
@@ -65,10 +65,40 @@ export function App() {
   const [selectedCertForEarly, setSelectedCertForEarly] = useState<DepositCertificate | null>(null);
   const [selectedCertForRenew, setSelectedCertForRenew] = useState<DepositCertificate | null>(null);
 
-  // Global refresh handler after transactions
-  const handleTxSuccess = async () => {
+  // User personal USDC balance state
+  const [userBalance, setUserBalance] = useState<bigint | null>(null);
+
+  const fetchUserBalance = useCallback(async () => {
+    if (!account || !usdc) {
+      setUserBalance(null);
+      return;
+    }
+    try {
+      const bal = await usdc.balanceOf(account);
+      setUserBalance(BigInt(bal));
+    } catch (err) {
+      console.warn('Lỗi đọc số dư USDC:', err);
+    }
+  }, [account, usdc]);
+
+  useEffect(() => {
+    fetchUserBalance();
+  }, [fetchUserBalance, refreshTrigger]);
+
+  // Global refresh handler after transactions or time-travel
+  const handleTxSuccess = async (newTimestamp?: bigint) => {
     setRefreshTrigger((prev) => prev + 1);
-    await Promise.all([refetchPlans(), refetchCerts(), syncBlockTime()]);
+    await Promise.all([
+      syncBlockTime(newTimestamp),
+      refetchPlans(),
+      refetchCerts(),
+      fetchUserBalance(),
+    ]);
+    // Kiểm tra lại sau 500ms để đảm bảo đồng bộ hoàn toàn với blockchain
+    setTimeout(() => {
+      fetchUserBalance();
+      refetchCerts();
+    }, 500);
   };
 
   const activeCertsCount = certificates.filter((c) => c.status === DepositStatus.Active).length;
@@ -80,8 +110,10 @@ export function App() {
         chainId={chainId}
         isConnecting={isConnecting}
         currentSimulatedTime={currentSimulatedTime}
+        userBalance={userBalance}
         onConnect={connectWallet}
         onOpenTimeTravel={() => setIsTimeTravelOpen(true)}
+        onRefreshAll={() => handleTxSuccess()}
       />
 
       <main className="flex-1 max-w-7xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-8 space-y-6">
@@ -167,7 +199,12 @@ export function App() {
 
           {/* Faucet Component Inline */}
           <div className="w-full sm:w-auto">
-            <Faucet account={account} usdcContract={usdc} />
+            <Faucet
+              account={account}
+              usdcContract={usdc}
+              balance={userBalance}
+              onMintSuccess={handleTxSuccess}
+            />
           </div>
         </div>
 
@@ -205,6 +242,8 @@ export function App() {
               setSelectedPlanForOpen(undefined);
               setIsOpenDepositModalOpen(true);
             }}
+            onOpenTimeTravel={() => setIsTimeTravelOpen(true)}
+            onRefreshAll={() => handleTxSuccess()}
           />
         )}
 
@@ -215,6 +254,7 @@ export function App() {
             vault={vault}
             usdc={usdc}
             account={account}
+            refreshTrigger={refreshTrigger}
             onSuccess={handleTxSuccess}
           />
         )}
@@ -298,7 +338,9 @@ export function App() {
         isOpen={isTimeTravelOpen}
         onClose={() => setIsTimeTravelOpen(false)}
         chainId={chainId}
-        onSuccess={syncBlockTime}
+        onSuccess={async (newTimestamp) => {
+          await handleTxSuccess(newTimestamp);
+        }}
       />
     </div>
   );

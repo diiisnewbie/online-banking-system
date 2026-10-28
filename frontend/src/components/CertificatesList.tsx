@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { ethers } from 'ethers';
 import { DepositCertificate, DepositStatus, SavingPlan } from '../contracts/types';
 import { CertificateCard } from './CertificateCard';
-import { FolderCheck, History, PlusCircle, AlertTriangle, Loader2 } from 'lucide-react';
+import { FolderCheck, History, PlusCircle, AlertTriangle, Loader2, FastForward, RefreshCw } from 'lucide-react';
 
 interface CertificatesListProps {
   certificates: DepositCertificate[];
@@ -18,6 +18,8 @@ interface CertificatesListProps {
   onOpenRenewModal: (cert: DepositCertificate) => void;
   onSuccess: () => Promise<void>;
   onOpenDepositModal: () => void;
+  onOpenTimeTravel?: () => void;
+  onRefreshAll?: () => Promise<void>;
 }
 
 export const CertificatesList: React.FC<CertificatesListProps> = ({
@@ -34,8 +36,22 @@ export const CertificatesList: React.FC<CertificatesListProps> = ({
   onOpenRenewModal,
   onSuccess,
   onOpenDepositModal,
+  onOpenTimeTravel,
+  onRefreshAll,
 }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
+  const handleManualRefresh = async () => {
+    if (onRefreshAll && !isRefreshing) {
+      setIsRefreshing(true);
+      try {
+        await onRefreshAll();
+      } finally {
+        setTimeout(() => setIsRefreshing(false), 500);
+      }
+    }
+  };
 
   const activeCerts = certificates.filter((c) => c.status === DepositStatus.Active);
   const historyCerts = certificates.filter((c) => c.status !== DepositStatus.Active);
@@ -86,13 +102,38 @@ export const CertificatesList: React.FC<CertificatesListProps> = ({
           </button>
         </div>
 
-        <button
-          onClick={onOpenDepositModal}
-          className="px-4 py-2.5 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl text-xs font-bold transition flex items-center space-x-2 shadow-lg shadow-indigo-950/40"
-        >
-          <PlusCircle className="w-4 h-4" />
-          <span>Mở Sổ Tiết Kiệm Mới</span>
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          {onOpenTimeTravel && (
+            <button
+              onClick={onOpenTimeTravel}
+              title="Mở công cụ tua nhanh thời gian (Dev Time-Travel)"
+              className="px-3 py-2 bg-indigo-950/70 hover:bg-indigo-900/80 border border-indigo-700/60 text-indigo-300 rounded-xl text-xs font-semibold transition flex items-center space-x-1.5 shadow-sm"
+            >
+              <FastForward className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Tua Thời Gian</span>
+            </button>
+          )}
+
+          {onRefreshAll && (
+            <button
+              onClick={handleManualRefresh}
+              disabled={isRefreshing}
+              title="Đồng bộ lại thời gian và làm mới danh sách sổ từ blockchain"
+              className="px-3 py-2 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-semibold border border-slate-700 transition flex items-center space-x-1.5"
+            >
+              <RefreshCw className={`w-3.5 h-3.5 ${isRefreshing ? 'animate-spin text-indigo-400' : ''}`} />
+              <span>Làm Mới</span>
+            </button>
+          )}
+
+          <button
+            onClick={onOpenDepositModal}
+            className="px-4 py-2 bg-gradient-to-r from-indigo-600 to-indigo-500 hover:from-indigo-500 hover:to-indigo-400 text-white rounded-xl text-xs font-bold transition flex items-center space-x-2 shadow-lg shadow-indigo-950/40"
+          >
+            <PlusCircle className="w-4 h-4" />
+            <span>Mở Sổ Tiết Kiệm Mới</span>
+          </button>
+        </div>
       </div>
 
       {/* Cảnh báo phòng ngừa lừa đảo thứ cấp ở Tab Lịch Sử [Q1] */}

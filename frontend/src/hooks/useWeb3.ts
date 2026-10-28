@@ -22,9 +22,18 @@ export function useWeb3() {
   );
 
   // Sync block time from chain
-  const syncBlockTime = useCallback(async (prov?: ethers.Provider) => {
+  const syncBlockTime = useCallback(async (explicitTimestamp?: bigint) => {
     try {
-      const p = prov || provider || new ethers.JsonRpcProvider(LOCAL_RPC_URL);
+      if (explicitTimestamp !== undefined) {
+        const nowSec = Math.floor(Date.now() / 1000);
+        timeOffsetRef.current = Number(explicitTimestamp) - nowSec;
+        setCurrentSimulatedTime(explicitTimestamp);
+        return;
+      }
+
+      // Luôn kết nối trực tiếp với node local qua JsonRpcProvider
+      // để tránh cache của MetaMask BrowserProvider
+      const p = new ethers.JsonRpcProvider(LOCAL_RPC_URL);
       const block = await p.getBlock('latest');
       if (block) {
         const nowSec = Math.floor(Date.now() / 1000);
@@ -34,7 +43,7 @@ export function useWeb3() {
     } catch (err) {
       console.warn('Failed to sync block time:', err);
     }
-  }, [provider]);
+  }, []);
 
   // Tick simulated time every second
   useEffect(() => {
@@ -101,7 +110,7 @@ export function useWeb3() {
         const s = await browserProvider.getSigner();
         setSigner(s);
         setProvider(browserProvider);
-        await syncBlockTime(browserProvider);
+        await syncBlockTime();
       }
     } catch (err: any) {
       console.error('Lỗi kết nối ví:', err);
