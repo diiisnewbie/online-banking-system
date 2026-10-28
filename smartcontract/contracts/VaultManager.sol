@@ -7,6 +7,7 @@ import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IVaultManager} from "./interfaces/IVaultManager.sol";
+import {ISavingCore} from "./interfaces/ISavingCore.sol";
 
 contract VaultManager is IVaultManager, Ownable, Pausable, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -17,6 +18,7 @@ contract VaultManager is IVaultManager, Ownable, Pausable, ReentrancyGuard {
     error NotSavingCore();
     error InsufficientVaultLiquidity();
     error AmountExceedsBalance();
+    error InsufficientCommitted();
 
     // --- Events ---
     event SavingCoreSet(address indexed core);
@@ -61,7 +63,13 @@ contract VaultManager is IVaultManager, Ownable, Pausable, ReentrancyGuard {
     function withdrawVault(uint256 amount) external onlyOwner whenNotPaused nonReentrant {
         uint256 balance = usdc.balanceOf(address(this));
         if (amount > balance) revert AmountExceedsBalance();
-        // [D25] C2 Guard hook (balance - amount >= totalCommittedInterest) for Phase 4
+
+        // Chot chan C2 [D25]: Chi kiem tra khi da ket noi SavingCore [D34]
+        if (savingCore != address(0)) {
+            uint256 committed = ISavingCore(savingCore).totalCommittedInterest();
+            if (balance - amount < committed) revert InsufficientCommitted();
+        }
+
         usdc.safeTransfer(msg.sender, amount);
         emit VaultWithdrawn(msg.sender, amount);
     }

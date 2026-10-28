@@ -1,8 +1,8 @@
-# PROJECT OVERVIEW v2.2 — ON-CHAIN TERM DEPOSIT SYSTEM (ONLINE BANKING)
+# PROJECT OVERVIEW v2.3 — ON-CHAIN TERM DEPOSIT SYSTEM (ONLINE BANKING)
 
-> **Document Purpose**: Tài liệu quy chuẩn kỹ thuật và nghiệp vụ tổng thể (Single Source of Truth) cho lập trình viên, mô hình AI và **kỳ bảo vệ đồ án**. Mô tả kiến trúc, 5 luồng nghiệp vụ, công thức toán học, các quyết định thiết kế đã chốt (D1–D32), Test Matrix, bảng API và lộ trình thực thi.
+> **Document Purpose**: Tài liệu quy chuẩn kỹ thuật và nghiệp vụ tổng thể (Single Source of Truth) cho lập trình viên, mô hình AI và **kỳ bảo vệ đồ án**. Mô tả kiến trúc, 5 luồng nghiệp vụ, công thức toán học, các quyết định thiết kế đã chốt (D1–D34), Test Matrix, bảng API và lộ trình thực thi.
 >
-> **Phiên bản:** v2.2 (2026-10-26) — đồng bộ sau khi hoàn thành Phase 3: chuẩn hóa mô tả M5 (`DepositNotActive`), I1 (chỉ hạ APR), đồng bộ view `getCertificatesOfOwner(address account)` và `getAllPlans()`, script xuất ABI `scripts/export-abi.js`, ghim Tailwind v3 (`^3.4.17`), loại bỏ alias `variant.ts` (Frontend độc lập đọc 100% on-chain).
+> **Phiên bản:** v2.3 (2026-10-26) — đồng bộ sau khi hoàn thành Phase 4: hiện thực C2 (Solvency Guard) & C1 (Deferred Interest), interface `ISavingCore.sol`, 7 chuyển động `totalCommittedInterest`, hàm `claimPendingInterest`, quyết định `[D33]` (revert `NoPendingInterest`) và `[D34]` (`savingCore == address(0)` bypass), chuyển đổi TC-06 thành M7 C1, bổ sung module Ignition `BankingSystem.ts`.
 > **Nguồn:** v1 + `CHANGES_REVIEW` (A1–A9, B10–B20, C21–C27) + các review bổ sung + quyết định đã xác nhận (Mục 15).
 > **Quy ước chú thích:** `[Dn]` = Decision ID (Mục 15) · `[Qn]` = Oral Defense Question (Mục 8) · `[Mn]`/`[ARn]` = Test ID (Mục 10) · **`N1–N5` = 5 ngày thực thi** (khác hẳn `[Dn]`).
 
@@ -673,6 +673,7 @@ ERC721Enumerable: balanceOf / tokenOfOwnerByIndex / ownerOf / tokenURI?
 | `AlreadyMatured()` | gọi `earlyWithdraw` **sau** đáo hạn | M5 |
 | `InsufficientVaultLiquidity()` | `payoutInterest`; renew/auto-renew khi vault thiếu | M9 |
 | `ClaimNotCovered()` | claim khi `vault.balance < unpaid` | M8 |
+| `NoPendingInterest()` | claim khi `unpaid == 0` [D33] | M8-4 |
 | `ZeroAddress()` | `setFeeReceiver(0)` | M20 |
 | `SavingCoreAlreadySet()` | `setSavingCore` lần 2 | M11 |
 | `NotSavingCore()` | `payoutInterest` gọi từ ví lạ | M11 |
@@ -718,5 +719,7 @@ ERC721Enumerable: balanceOf / tokenOfOwnerByIndex / ownerOf / tokenURI?
 | **D30** | Bảng cập nhật `totalCommittedInterest` theo từng luồng (5.7) — thao tác nội bộ trong SavingCore | ✅ | C26 |
 | **D31** | **Chỉ `ownerOf(depositId)`** được gọi các luồng sở hữu; account được `approve`/operator ERC-721 **không có quyền** này (chỉ được `transferFrom`) | ✅ | review — quyết định riêng |
 | **D32** | **CEI + `ReentrancyGuard`** trên mọi luồng ra/vào tiền; `status` cập nhật trước mọi transfer | ✅ | F/Q7 + review |
+| **D33** | `claimPendingInterest` revert `NoPendingInterest()` khi `unpaidInterest == 0` (thay vì silent return) | ✅ | Phase 4 |
+| **D34** | `withdrawVault` bỏ qua kiểm tra Solvency Guard khi `savingCore == address(0)` (cho phép rút tự do khi chưa kết nối Core) | ✅ | Phase 4 |
 
-**Ánh xạ bổ sung**: A6 → Q1 (Mục 8) · A9 → D22–D24 · A4 → D8 · A7 → D12 · AR8=4 lần → `[AR8]` (Mục 4.5/10) · Mục 9–13 (E) là phần mới hoàn toàn · review vòng 1 → D5, D19, D23, D25, D29, D31, D32.
+**Ánh xạ bổ sung**: A6 → Q1 (Mục 8) · A9 → D22–D24 · A4 → D8 · A7 → D12 · AR8=4 lần → `[AR8]` (Mục 4.5/10) · Mục 9–13 (E) là phần mới hoàn toàn · review vòng 1 → D5, D19, D23, D25, D29, D31, D32 · Phase 4 → D33, D34.

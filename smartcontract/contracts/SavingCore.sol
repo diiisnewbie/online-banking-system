@@ -8,8 +8,9 @@ import {SafeERC20} from "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
 import {ReentrancyGuard} from "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import {IVaultManager} from "./interfaces/IVaultManager.sol";
+import {ISavingCore} from "./interfaces/ISavingCore.sol";
 
-contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
+contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // --- Enums and Structs ---
@@ -50,6 +51,8 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
     error AlreadyMatured();
     // Declared in SavingCore to decode ABI when bubbling up from VaultManager.payoutInterest:
     error InsufficientVaultLiquidity();
+    error ClaimNotCovered();
+    error NoPendingInterest();
 
     // --- Events ---
     event PlanCreated(uint256 indexed planId, uint256 tenorDays, uint256 aprBps);
@@ -81,6 +84,16 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
         address indexed receiver,
         uint256 penalty
     );
+    event InterestDeferred(
+        uint256 indexed depositId,
+        address indexed owner,
+        uint256 amount
+    );
+    event InterestClaimed(
+        uint256 indexed depositId,
+        address indexed claimer,
+        uint256 amount
+    );
 
     // --- State Variables ---
     IERC20 public immutable usdc;
@@ -88,6 +101,9 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
     uint256 public immutable gracePeriod;
     uint256 public planCount;
     uint256 public nextDepositId = 1;
+
+    uint256 public override totalCommittedInterest;
+    mapping(uint256 => uint256) public unpaidInterest;
 
     mapping(uint256 => SavingPlan) public plans;
     mapping(uint256 => DepositCertificate) public certificates;
@@ -193,6 +209,9 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
             status: DepositStatus.Active
         });
 
+        uint256 interest = _calcInterest(amount, plan.aprBps, plan.tenorDays * 1 days);
+        totalCommittedInterest += interest;
+
         emit DepositOpened(depositId, msg.sender, planId, amount, maturityAt, plan.aprBps);
 
         usdc.safeTransferFrom(msg.sender, address(this), amount);
@@ -210,12 +229,24 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
         cert.status = DepositStatus.Withdrawn;
 
         uint256 principal = cert.principal;
-        uint256 interest = _calcInterest(principal, cert.aprBpsAtOpen, cert.maturityAt - cert.startAt);
+        uint256 interest = _interestOf(cert);
+        bool payNow = usdc.balanceOf(address(vault)) >= interest;
 
-        emit Withdrawn(depositId, msg.sender, principal, interest, false);
+        if (payNow) {
+            totalCommittedInterest -= interest;
+        } else {
+            unpaidInterest[depositId] += interest;
+        }
 
         usdc.safeTransfer(msg.sender, principal);
-        vault.payoutInterest(msg.sender, interest);
+
+        if (payNow) {
+            vault.payoutInterest(msg.sender, interest);
+            emit Withdrawn(depositId, msg.sender, principal, interest, false);
+        } else {
+            emit Withdrawn(depositId, msg.sender, principal, 0, false);
+            emit InterestDeferred(depositId, msg.sender, interest);
+        }
     }
 
     function earlyWithdraw(uint256 depositId) external whenSystemNotPaused nonReentrant {
@@ -229,6 +260,9 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
         cert.status = DepositStatus.Withdrawn;
 
         uint256 principal = cert.principal;
+        uint256 plannedInterest = _interestOf(cert);
+        totalCommittedInterest -= plannedInterest;
+
         uint256 penalty = (principal * cert.penaltyBpsAtOpen) / 10000;
         uint256 amountToUser = principal - penalty;
 
@@ -276,6 +310,9 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
             status: DepositStatus.Active
         });
 
+        uint256 newInterest = _calcInterest(newPrincipal, newPlan.aprBps, newPlan.tenorDays * 1 days);
+        totalCommittedInterest = totalCommittedInterest - oldInterest + newInterest;
+
         emit Renewed(oldDepositId, newDepositId, newPrincipal, newPlanId);
 
         vault.payoutInterest(address(this), oldInterest);
@@ -312,6 +349,9 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
             status: DepositStatus.Active
         });
 
+        uint256 newInterest = _calcInterest(newPrincipal, oldCert.aprBpsAtOpen, oldTenor);
+        totalCommittedInterest = totalCommittedInterest - oldInterest + newInterest;
+
         emit Renewed(oldDepositId, newDepositId, newPrincipal, oldCert.planId);
 
         vault.payoutInterest(address(this), oldInterest);
@@ -320,6 +360,28 @@ contract SavingCore is ERC721Enumerable, Ownable, ReentrancyGuard {
 
     function _calcInterest(uint256 principal, uint256 aprBps, uint256 tenorSeconds) internal pure returns (uint256) {
         return (principal * aprBps * tenorSeconds) / (365 days * 10000);
+    }
+
+    function _interestOf(DepositCertificate storage cert) internal view returns (uint256) {
+        return _calcInterest(cert.principal, cert.aprBpsAtOpen, cert.maturityAt - cert.startAt);
+    }
+
+    function claimPendingInterest(uint256 depositId) external whenSystemNotPaused nonReentrant {
+        if (depositId == 0 || depositId >= nextDepositId) revert DepositNotFound(depositId);
+        if (ownerOf(depositId) != msg.sender) revert NotDepositOwner();
+
+        uint256 unpaid = unpaidInterest[depositId];
+        if (unpaid == 0) revert NoPendingInterest();
+
+        if (usdc.balanceOf(address(vault)) < unpaid) revert ClaimNotCovered();
+
+        // Effects truoc
+        unpaidInterest[depositId] = 0;
+        totalCommittedInterest -= unpaid;
+
+        // Interactions
+        vault.payoutInterest(msg.sender, unpaid);
+        emit InterestClaimed(depositId, msg.sender, unpaid);
     }
 
     function previewInterest(uint256 depositId) external view returns (uint256) {

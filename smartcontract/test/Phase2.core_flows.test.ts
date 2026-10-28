@@ -191,7 +191,7 @@ describe("Phase 2 -- Core Flows Test Suite (24 Scenarios)", function () {
     expect(userAfter - userBefore).to.equal(1_000_000_000n);
   });
 
-  it("TC-06 [M7, Q2, D27] -- Empty Vault on withdrawAtMaturity reverts InsufficientVaultLiquidity atomically", async function () {
+  it("TC-06 [M7, Q2, D22, D27] -- Empty Vault on withdrawAtMaturity delivers 100% principal and defers interest", async function () {
     const { usdc, vault, core, deployer, user } = await networkHelpers.loadFixture(deployPhase2Fixture);
 
     // Withdraw all funds from Vault to simulate empty vault
@@ -204,15 +204,26 @@ describe("Phase 2 -- Core Flows Test Suite (24 Scenarios)", function () {
 
     await networkHelpers.time.setNextBlockTimestamp(cert.maturityAt);
 
+    const userBalBefore = await usdc.balanceOf(user.address);
     const coreBalBefore = await usdc.balanceOf(core.target);
 
-    // Call withdrawAtMaturity -> should revert InsufficientVaultLiquidity from Vault
+    // Call withdrawAtMaturity -> should deliver 100% principal and defer interest
+    const expectedInterest = 5_547_945n;
     await expect(core.connect(user).withdrawAtMaturity(1))
-      .to.be.revertedWithCustomError(vault, "InsufficientVaultLiquidity");
+      .to.emit(core, "Withdrawn")
+      .withArgs(1n, user.address, 1_000_000_000n, 0n, false)
+      .and.to.emit(core, "InterestDeferred")
+      .withArgs(1n, user.address, expectedInterest);
 
-    // Atomic verify: principal not sent, cert remains Active
-    expect(await usdc.balanceOf(core.target)).to.equal(coreBalBefore);
-    expect((await core.getCertificate(1)).status).to.equal(0n); // Active
+    // User receives 100% principal
+    expect((await usdc.balanceOf(user.address)) - userBalBefore).to.equal(1_000_000_000n);
+    expect(coreBalBefore - (await usdc.balanceOf(core.target))).to.equal(1_000_000_000n);
+
+    // Cert status is Withdrawn (1n)
+    expect((await core.getCertificate(1)).status).to.equal(1n);
+
+    // Unpaid interest is recorded
+    expect(await core.unpaidInterest(1)).to.equal(expectedInterest);
   });
 
   // ==========================================
@@ -437,12 +448,13 @@ describe("Phase 2 -- Core Flows Test Suite (24 Scenarios)", function () {
   it("TC-15 [M9, D24] -- Vault empty during renewDeposit and autoRenewDeposit reverts InsufficientVaultLiquidity", async function () {
     const { usdc, vault, core, deployer, user, stranger } = await networkHelpers.loadFixture(deployPhase2Fixture);
 
+    // Empty vault before opening deposits so committed == 0
+    await vault.connect(deployer).withdrawVault(await usdc.balanceOf(vault.target));
+    expect(await usdc.balanceOf(vault.target)).to.equal(0n);
+
     await core.connect(user).openDeposit(0, 1_000_000_000n); // ID 1
     await core.connect(user).openDeposit(0, 1_000_000_000n); // ID 2
     const cert1 = await core.getCertificate(1);
-
-    // Empty vault
-    await vault.connect(deployer).withdrawVault(await usdc.balanceOf(vault.target));
 
     // Try manual renew
     await networkHelpers.time.setNextBlockTimestamp(cert1.maturityAt);

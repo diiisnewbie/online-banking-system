@@ -32,6 +32,11 @@
   },
   {
     "inputs": [],
+    "name": "InsufficientCommitted",
+    "type": "error"
+  },
+  {
+    "inputs": [],
     "name": "InsufficientVaultLiquidity",
     "type": "error"
   },
