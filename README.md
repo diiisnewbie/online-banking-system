@@ -2,7 +2,8 @@
 
 > **Đồ án môn học**: Blockchain Programming / Lập trình Blockchain  
 > **Sinh viên thực hiện**: Nguyễn Văn A (Ví dụ) — **MSSV: 20210041** (Hai chữ số cuối: **41**)  
-> **Chữ số cuối ($A$)**: `1` · **Chữ số kế cuối ($B$)**: `4`
+> **Chữ số cuối ($A$)**: `1` · **Chữ số kế cuối ($B$)**: `4`  
+> **Frontend Stack**: React 18, TypeScript, TailwindCSS v3 (`^3.4.17`), Ethers.js v6  
 
 ---
 
@@ -20,11 +21,11 @@
 
 ---
 
-## 2. CẢNH BÁO AN NINH & BẢN QUYỀN
+## 2. CẢNH BÁO AN NINH & BẢN QUYỀN (UNAUDITED DISCLAIMER)
 
 > [!WARNING]
 > **Dự án phục vụ mục đích giáo dục & nghiên cứu học thuật:**
-> 1. Mã nguồn này được phát triển cho đồ án môn học Blockchain Programming, **chưa qua kiểm toán bảo mật độc lập bởi bên thứ ba**. Tuyệt đối không sử dụng trên mạng Mainnet với tài sản thật.
+> 1. Mã nguồn này được phát triển cho đồ án môn học Blockchain Programming, **chưa qua kiểm toán bảo mật độc lập bởi bên thứ ba (Unaudited)**. Tuyệt đối không sử dụng trên mạng Mainnet với tài sản thật.
 > 2. `MockUSDC` là token ERC-20 thử nghiệm nội bộ với faucet mở tự do, không có giá trị quy đổi tài chính ngoài đời thực.
 > 3. Tính năng tua thời gian (Dev Time-Travel) sử dụng RPC chuyên biệt `evm_increaseTime` và `evm_mine`, **chỉ hoạt động trên môi trường local development (Hardhat chainId 31337)**.
 
@@ -47,7 +48,7 @@ Hệ thống tuân thủ nghiêm ngặt nguyên tắc **Phân tách trách nhi�
          |                                                                     |
          v                                                                     v
 +-----------------------------+                       +--------------------------------+
-|      SavingCore.sol         |   payoutInterest()    |       VaultManager.sol         |
++      SavingCore.sol         |   payoutInterest()    |       VaultManager.sol         |
 |  (ERC721Enumerable)         |---------------------->|                                |
 | - Holds Users' Principal    |   (only by SavingCore)| - Holds Bank's Interest Fund   |
 | - Saving Plans + committed  |                       | - Admin Liquidity Control      |
@@ -80,6 +81,9 @@ Hệ thống tuân thủ nghiêm ngặt nguyên tắc **Phân tách trách nhi�
 3. **Tái tục vốn gốc (Compound Interest)**:
    $$\text{newPrincipal} = \text{oldPrincipal} + \text{oldInterest}$$
    *Lãi kỳ cũ được trích xuất từ Vault chuyển vào SavingCore để làm tài sản bảo chứng cho gốc kỳ mới.*
+4. **Solvency Guard C2 (Chốt chặn thanh khoản quỹ Admin)**:
+   $$\text{vaultBalance} - \text{amount} \ge \text{totalCommittedInterest}$$
+   *Bảo đảm Admin chỉ được rút phần thanh khoản thặng dư dôi dư, không bao giờ rút lẹm vào phần lãi đã cam kết bảo chứng.*
 
 ---
 
@@ -160,43 +164,75 @@ Dưới đây là phần giải trình 7 vấn đề cốt lõi sinh viên tự 
 
 ---
 
-## 7. THÁCH THỨC SÁNG TẠO (CREATIVE CHALLENGES — MỤC 8.3 CỦA ĐỀ)
+## 7. GHI CHÚ THÁCH THỨC SÁNG TẠO C1 / C2 (PROBLEM / SOLUTION / TRADE-OFF)
 
-### Thách thức C1: Bảo vệ tiền gốc khi thiếu thanh khoản (Principal is Always Safe)
-* **Vấn đề giải quyết (Problem)**: Khi ngân hàng cạn kiệt thanh khoản trả lãi, mô hình truyền thống revert cả giao dịch sẽ giam giữ luôn 100% tiền gốc của khách hàng, gây ra khủng hoảng niềm tin và rủi ro thanh khoản nghiêm trọng.
-* **Giải pháp kỹ thuật (Solution)**: Tách bạch dòng tiền: 100% tiền gốc được hoàn trả ngay từ `SavingCore` về ví người dùng. Toàn bộ tiền lãi chưa thanh toán được chuyển sang trạng thái nợ `unpaidInterest[depositId]` và phát sự kiện `InterestDeferred`. Khách hàng giữ chứng chỉ NFT có thể gọi `claimPendingInterest` để nhận tiền khi quỹ được bổ sung vốn.
-* **Đánh đổi kỹ thuật (Trade-offs)**:
-  - *Cơ chế All-or-Nothing*: Người dùng chỉ được nhận nợ khi Vault có đủ tiền trả trọn vẹn khoản nợ đó, ngăn ngừa sự phân mảnh trạng thái và tranh chấp wei lẻ.
-  - *Nguyên tắc First-Come-First-Served (FCFS)*: Khi Vault chỉ được nạp một phần tiền, ai gọi claim trước sẽ được thanh toán trước. Đây là sự đánh đổi có chủ đích để tránh vòng lặp chia tỷ lệ (Pro-rata loop) gây lỗi Out-of-Gas DoS trên smart contract.
+### Thách thức C1: Bảo toàn tiền gốc tuyệt đối (Principal is Always Safe)
+* **Vấn đề (Problem)**: Khi ngân hàng cạn kiệt thanh khoản trả lãi trong Vault, thiết kế thông thường revert toàn bộ giao dịch rút tiền, dẫn đến việc giam cầm bất hợp pháp cả 100% tiền gốc của khách hàng, gây ra rủi ro thanh khoản nghiêm trọng.
+* **Giải pháp (Solution)**: Tách bạch dòng tiền thanh toán: 100% tiền gốc được hoàn trả ngay lập tức từ `SavingCore` về ví khách hàng. Toàn bộ tiền lãi chưa chi trả được chuyển sang trạng thái nợ `unpaidInterest[depositId]` và phát sự kiện `InterestDeferred`. Khách hàng (hoặc người nhận chuyển nhượng NFT) có thể gọi `claimPendingInterest(depositId)` để nhận nốt tiền lãi khi Vault được nạp tiền.
+* **Đánh đổi (Trade-offs)**:
+  - *Cơ chế All-or-Nothing*: Khách hàng chỉ claim được khi Vault có đủ 100% số tiền lãi đang nợ cho chứng chỉ đó; hệ thống không hỗ trợ trả góp từng phần để tránh phân mảnh trạng thái và tranh chấp số dư wei lẻ.
+  - *Thứ tự ưu tiên First-Come-First-Served (FCFS)*: Khi Vault được nạp một phần tiền, ai gọi claim trước sẽ nhận trước. Đây là sự đánh đổi có chủ đích để tránh vòng lặp chia tỷ lệ (Pro-rata loop) gây lỗi Out-of-Gas DoS trên smart contract.
 
-### Thách thức C2: Bảo vệ quỹ cam kết (Solvency Guard)
-* **Vấn đề giải quyết (Problem)**: Ngăn chặn Admin ngân hàng lạm quyền rút cạn tiền khỏi quỹ trả lãi (`withdrawVault`), làm mất khả năng thanh toán cho các khoản tiền gửi đang hoạt động.
-* **Giải pháp kỹ thuật (Solution)**: `SavingCore` duy trì biến trạng thái `totalCommittedInterest` đại diện cho tổng nghĩa vụ trả lãi của toàn bộ các khoản tiền gửi đang `Active` cộng với tổng số nợ hoãn trả C1. Hàm `withdrawVault` của `VaultManager` bắt buộc phải vượt qua chốt chặn staticcall 2 lớp an toàn: `amount <= balance` và `balance - amount >= totalCommittedInterest`.
-* **Hạn chế đã biết (Known Caveat bắt buộc lưu ý)**:
-  - C2 **chống Admin rút cạn vốn, không chống được undercollateralization do compound khi renew**: Khi khách hàng tái tục, lãi cũ nhập gốc làm tăng lãi cam kết kỳ mới ($I_{new} > I_{old}$) trong khi số dư thực tế trong Vault chưa tăng nếu Admin chưa nạp thêm vốn. Khi `balance < committed`, hàm `withdrawVault` sẽ tự động khóa hoàn toàn (kể cả rút 0 đồng — test `TC-C2-10`) cho đến khi Admin nạp thêm vốn qua `fundVault`.
-
----
-
-## 8. KỊCH BẢN VIDEO DEMO THỰC CHIẾN (3–5 PHÚT)
-
-Phân bổ 3 ví Hardhat tách bạch nhằm chứng minh dòng tiền rõ ràng:
-- **Ví 0 (`0xf39F...2266`)**: Admin ngân hàng (Deployer, nạp Vault, thao tác Pause).
-- **Ví 1 (`0x7099...79C8`)**: Người dùng Demo (Faucet, mở sổ, tất toán, chịu phạt).
-- **Ví 2 (`0x3C44...93BC`)**: Ví nhận phạt rút sớm (`feeReceiver`).
-
-| Cảnh | Thời lượng | Nội dung thao tác trên giao diện | Ví thực hiện | Kết quả kỳ vọng xác minh |
-|---|:---:|---|---|---|
-| **Cảnh 1: Mở sổ tiết kiệm** | 1.0 phút | Faucet 1,000 USDC $\rightarrow$ Mở sổ Plan 0 (90 ngày) $\rightarrow$ Approve USDC $\rightarrow$ Confirm Open. | Ví 1 (User) | Hiện chứng chỉ NFT #1, Countdown timer ~90 ngày, Snapshot APR 2.25%, Lãi dự kiến: **5.547945 USDC**. |
-| **Cảnh 2: Nhảy thời gian & Rút đúng hạn** | 1.0 phút | Bật modal `DevTimeTravel`, tua nhanh **+90 Ngày** $\rightarrow$ Countdown chuyển sang badge xanh *"Đã Đáo Hạn"* $\rightarrow$ Bấm "Rút Đúng Hạn". | Ví 1 (User) | Nhận về 1,000 USDC gốc và **5.547945 USDC** lãi từ Vault. Sổ chuyển sang tab *"Lịch Sử Tất Toán"*. |
-| **Cảnh 3: Rút trước hạn chịu phạt** | 1.0 phút | Mở sổ mới 1,000 USDC (NFT #2) $\rightarrow$ Bấm "Rút Trước Hạn" ngay $\rightarrow$ Xác nhận phạt 5.00%. | Ví 1 (User) | Ví 1 nhận về 950 USDC, số dư Ví 2 (`feeReceiver`) tăng đúng **50 USDC**. |
-| **Cảnh 4: Tái tục & Admin Solvency Guard C2** | 1.5 phút | Mở sổ mới 1,000 USDC, nhảy thời gian +90 ngày $\rightarrow$ Bấm "Tái Tục (Renew)" sang Plan 1 $\implies$ Gốc mới **1,005.547945 USDC**.<br>Chuyển sang Ví 0 (Admin): Mở tab Admin Panel, chỉ rõ `Vault Balance` và `totalCommittedInterest`. Thử rút vượt mức cam kết $\implies$ Solvency Guard C2 chặn rút. | Ví 1 $\rightarrow$ Ví 0 (Admin) | Gốc mới compound chính xác. Solvency Guard C2 hiển thị thông báo an toàn, bảo vệ thanh khoản. |
+### Thách thức C2: Solvency Guard (Bảo vệ thanh khoản lãi cam kết)
+* **Vấn đề (Problem)**: Ngăn chặn Admin ngân hàng lạm quyền rút cạn quỹ trả lãi (`withdrawVault`), dẫn đến mất khả năng thanh toán cho các khoản tiền gửi đang hoạt động.
+* **Giải pháp (Solution)**: `SavingCore` lưu trữ biến `totalCommittedInterest` đại diện cho tổng nghĩa vụ trả lãi của toàn bộ khoản gửi `Active` cộng với tổng nợ hoãn trả C1. Hàm `withdrawVault(amount)` tại `VaultManager` thực hiện 1 staticcall `ISavingCore.totalCommittedInterest()` và kiểm tra 2 lớp bảo vệ: `amount <= balance` và `balance - amount >= totalCommittedInterest`.
+* **Đánh đổi & Hạn chế đã biết (Trade-offs & Known Caveat)**:
+  - *Caveat Undercollateralization*: C2 chống Admin rút cạn vốn, nhưng **không chống được undercollateralization do compound khi renew**. Khi khách hàng tái tục, lãi cũ nhập gốc làm tăng lãi cam kết kỳ mới ($I_{new} > I_{old}$) trong khi số dư thực tế trong Vault chưa tăng nếu Admin chưa nạp thêm vốn. Khi `balance < committed`, hàm `withdrawVault` sẽ tự động khóa hoàn toàn (kể cả rút 0 đồng — test `TC-C2-10`) cho đến khi Admin nạp thêm vốn qua `fundVault`.
 
 ---
 
-## 9. KẾT QUẢ KIỂM THỬ & ĐỘ BAO PHỦ MÃ NGUỒN (COVERAGE 96.88%)
+## 8. THREAT MODEL & KNOWN LIMITATIONS (MÔ HÌNH NGUY CƠ & HẠN CHẾ ĐÃ BIẾT)
 
-Hệ thống sở hữu bộ kiểm thử tự động toàn diện gồm **71 tests passing (100%)** với độ bao phủ hoàn hảo:
+Mục này tổng hợp các quyết định kỹ thuật sâu sắc nhất trong quá trình thiết kế hệ thống:
 
+1. **Phòng vệ Reentrancy trên ERC-721 Callback (`[D16]`, `[D32]`)**:
+   - Khi đúc chứng chỉ (`_safeMint`), nếu người nhận là contract triển khai hàm `onERC721Received`, kẻ tấn công có thể cố tình gọi đệ quy ngược lại các hàm `openDeposit`, `withdrawAtMaturity` hoặc `earlyWithdraw`.
+   - **Giải pháp**: Áp dụng triệt để OpenZeppelin `ReentrancyGuard` trên toàn bộ các hàm cốt lõi kết hợp mẫu thiết kế Checks-Effects-Interactions (CEI). Biến trạng thái `cert.status = DepositStatus.Withdrawn` luôn được ghi nhận trước mọi tương tác chuyển token ra bên ngoài ([SavingCore.sol:229](file:///d:/AppsCyclone/banking-system/smartcontract/contracts/SavingCore.sol#L229)).
+2. **Quyền sở hữu thực tế vs Người được ủy quyền (`[D31]`)**:
+   - Theo chuẩn ERC-721, hàm `approve` hoặc `setApprovalForAll` cấp quyền cho bên thứ ba (Operator).
+   - Tuy nhiên, trong hệ thống ngân hàng này, các thao tác tài chính (Rút tiền, Tái tục thủ công, Nhận nợ lãi C1) **bắt buộc phải do chính `ownerOf(depositId) == msg.sender` thực hiện**. Operator được ủy quyền chỉ có quyền chuyển nhượng chứng chỉ (`transferFrom`), tuyệt đối không được tự ý rút tiền của chủ sở hữu.
+3. **Caveat Solvency Guard C2 & Rủi ro Tái tục Vốn kép**:
+   - Khi tái tục sổ, tiền lãi được gộp vào tiền gốc mới. Nghĩa vụ cam kết tăng lên tức thì mà không cần sự can thiệp của Admin. Nếu nhiều người cùng tái tục mà Vault không được nạp thêm vốn, tỷ lệ bảo chứng thanh khoản có thể giảm dưới 100%. Khi đó, toàn bộ lệnh rút của Admin bị đóng băng tuyệt đối để ưu tiên quyền lợi cho khách hàng.
+4. **Cơ chế First-Come-First-Served (FCFS) khi thiếu thanh khoản**:
+   - Trong kịch bản Vault chỉ được nạp lại một phần nhỏ tiền nợ C1, hệ thống thanh toán cho người đến trước nhận trước. Không áp dụng thuật toán chia đều (pro-rata) vì thuật toán này đòi hỏi duyệt qua danh sách vô hạn các chủ nợ, gây cạn kiệt gas (Block Gas Limit DoS).
+5. **Quyền hạn Admin Khẩn cấp (Emergency Pause Power)**:
+   - Admin có quyền bật chế độ tạm dừng khẩn cấp (`pause()`). Khi pause, toàn bộ các luồng mở sổ, tất toán, tái tục và rút tiền của Admin đều bị chặn đứng để bảo vệ an toàn hệ thống khi phát hiện sự cố.
+   - **Ngoại lệ duy nhất**: Hàm nạp quỹ `fundVault` vẫn được phép thực thi ngay cả khi đang pause (`[D1]`), giúp Admin có thể bơm thêm thanh khoản cứu trợ mà không làm gián đoạn an ninh.
+
+---
+
+## 9. BÁO CÁO CÁC TRƯỜNG HỢP KIỂM THỬ (TEST CASES REPORT)
+
+Hệ thống sở hữu bộ kiểm thử tự động toàn diện gồm **71 tests passing (100%)** với độ bao phủ hoàn hảo (**Line Coverage 96.88%**, trong đó `SavingCore.sol` và `VaultManager.sol` đạt **100.00%**). Dưới đây là bảng báo cáo chi tiết các trường hợp kiểm thử quan trọng:
+
+| Nhóm chức năng | Trường hợp kiểm thử (Test Scenario) | Kết quả kỳ vọng | Kết quả thực tế | Trạng thái | Dẫn chứng mã nguồn |
+|---|---|---|---|:---:|---|
+| **`createPlan`** | Tạo gói tiết kiệm hợp lệ | Lưu plan, tăng `planCount`, emit `PlanCreated` | Tạo thành công | **PASS** | `Phase1.smoke:S7`, `BankingSystem.ts:46` |
+| **`createPlan`** | Gói bị vô hiệu hóa (`disablePlan`) | `plan.enabled = false`, emit `PlanToggled` | Cập nhật chính xác | **PASS** | `Phase1.smoke:S6`, `Phase2:TC-20` |
+| **`createPlan`** | APR không hợp lệ (`apr == 0` hoặc `apr > 10000`) | Revert `InvalidPlanParams()` | Revert đúng lỗi | **PASS** | `SavingCore.sol:159`, `Phase1.smoke:S7` |
+| **`openDeposit`** | Luồng chuẩn (Happy path) | Mint NFT cert #1, chuyển gốc vào SavingCore, tăng committed | Hoàn thành chuẩn xác | **PASS** | `Phase2:TC-01`, `Phase1.smoke:S3` |
+| **`openDeposit`** | Dưới mức tiền gửi tối thiểu (`amount < minDeposit`) | Revert `InvalidDepositAmount()` | Revert đúng lỗi | **PASS** | `SavingCore.sol:195`, `Phase1.smoke:S4` |
+| **`openDeposit`** | Trên mức tiền gửi tối đa (`amount > maxDeposit`) | Revert `InvalidDepositAmount()` | Revert đúng lỗi | **PASS** | `SavingCore.sol:196`, `Phase1.smoke:S4` |
+| **`openDeposit`** | Mở sổ vào gói đã bị tắt (`plan.enabled == false`) | Revert `PlanDisabled()` | Revert đúng lỗi | **PASS** | `SavingCore.sol:193`, `Phase1.smoke:S4` |
+| **`withdrawAtMaturity`** | Tính toán và trả lãi chính xác khi đáo hạn | Trả 100% gốc từ Core + Lãi từ Vault theo floor rounding | Nhận đúng số dư | **PASS** | `Phase2:TC-01`, `TC-21` |
+| **`withdrawAtMaturity`** | Rút quá sớm trước giây đáo hạn | Revert `NotMatured()` | Revert đúng lỗi | **PASS** | `SavingCore.sol:227`, `Phase2:TC-02` |
+| **`withdrawAtMaturity`** | Rút sổ đã tất toán trước đó | Revert `DepositNotActive()` | Revert đúng lỗi | **PASS** | `SavingCore.sol:226`, `Phase2:TC-03` |
+| **`earlyWithdraw`** | Phạt rút sớm chính xác theo tỷ lệ snapshot | Cắt 5.00% gốc gửi ví `feeReceiver`, trả 95% gốc cho user | Chuyển đúng 2 ví | **PASS** | `SavingCore.sol:263`, `Phase2:TC-05` |
+| **`earlyWithdraw`** | Không chi trả lãi khi rút trước hạn | Khách hàng nhận 0 đồng lãi, xóa nghĩa vụ committed tương ứng | Không trả lãi | **PASS** | `SavingCore.sol:267`, `Phase2:TC-05` |
+| **`renewDeposit` (thủ công)** | Tiền gốc mới chính xác sau khi tái tục | `newPrincipal = oldPrincipal + oldInterest` (compound) | Gốc mới chính xác | **PASS** | `SavingCore.sol:297`, `Phase2:TC-09` |
+| **`renewDeposit` (thủ công)** | Cập nhật trạng thái sau tái tục | Sổ cũ chuyển `Renewed`, đúc NFT mới `Active` | Đổi status chuẩn | **PASS** | `SavingCore.sol:287`, `Phase2:TC-09` |
+| **`autoRenewDeposit`** | Gọi trước khi hết ân hạn 3 ngày | Revert `InGracePeriod()` | Revert đúng lỗi | **PASS** | `SavingCore.sol:327`, `Phase2:TC-11` |
+| **`autoRenewDeposit`** | Gọi sau thời gian ân hạn (Bot hoặc Permissionless) | Tái tục thành công, lùi ngày bắt đầu theo cơ chế Backdate | Tái tục thành công | **PASS** | `SavingCore.sol:338`, `Phase2:TC-11` |
+| **`autoRenewDeposit`** | Khóa snapshot APR và bỏ qua cờ disabled | Tiếp tục hưởng lãi suất cũ an toàn, không bị kẹt tiền | Bảo vệ khách hàng | **PASS** | `SavingCore.sol:331`, `Phase2:TC-12` |
+| **`Vault`** | Nạp tiền vào quỹ (`fundVault`) | Tăng số dư Vault, emit `VaultFunded` | Nạp thành công | **PASS** | `VaultManager.sol:58`, `Phase1.smoke:S8` |
+| **`Vault`** | Rút tiền khỏi quỹ (`withdrawVault`) | Rút thành công khi thỏa mãn Solvency Guard C2 | Chuyển về ví admin | **PASS** | `VaultManager.sol:63`, `Phase4:TC-C2-01` |
+| **`Vault`** | Vault không đủ tiền trả lãi (C1 & C2) | C1: Trả 100% gốc, hoãn lãi vào `unpaidInterest`. C2: Chặn rút admin | Hoạt động an toàn | **PASS** | `Phase4:TC-C1-01`, `Phase4:TC-C2-02` |
+| **`Pause`** | Giao dịch rút tiền bị chặn khi hệ thống pause | Revert `EnforcedPause()` trên các luồng user và rút admin | Chặn hoàn toàn | **PASS** | `VaultManager.sol:64`, `Phase2:TC-23` |
+| **Mở rộng (Security)** | Tấn công Reentrancy qua callback `_safeMint` | Revert `ReentrancyGuardReentrantCall()` | Chặn đứng 100% | **PASS** | `Phase1.smoke:S10 [M16, Q7]` |
+| **Mở rộng (Ownership)** | Chuyển nhượng NFT sang ví mới và nhận quyền rút | Ví mới rút thành công, ví cũ gọi revert `NotDepositOwner()` | Chuẩn ERC-721 | **PASS** | `Phase2:TC-17`, `Phase4:TC-C1-03` |
+| **Mở rộng (Math)** | Kiểm chứng sai số làm tròn (Rounding Dust) | Ngưỡng 180 wei lãi = 0; 181 wei sinh 1 wei lãi; floor an toàn | Khớp toán học | **PASS** | `Phase2:TC-21 [Q4]` |
+
+### Bảng tổng hợp Code Coverage
 ```
 ╔═══════════════════════════════════════════════════════════════════════════════════════╗
 ║                                    Coverage Report                                    ║
@@ -219,9 +255,24 @@ Hệ thống sở hữu bộ kiểm thử tự động toàn diện gồm **71 t
 
 ---
 
-## 10. BẢN ĐỒ ÁNH XẠ (TRACEABILITY MATRIX)
+## 10. KỊCH BẢN VIDEO DEMO THỰC CHIẾN (3–5 PHÚT)
+
+Phân bổ 3 ví Hardhat tách bạch nhằm chứng minh dòng tiền rõ ràng:
+- **Ví 0 (`0xf39F...2266`)**: Admin ngân hàng (Deployer, nạp Vault, thao tác Pause).
+- **Ví 1 (`0x7099...79C8`)**: Người dùng Demo (Faucet, mở sổ, tất toán, chịu phạt).
+- **Ví 2 (`0x3C44...93BC`)**: Ví nhận phạt rút sớm (`feeReceiver`).
+
+| Cảnh | Thời lượng | Nội dung thao tác trên giao diện | Ví thực hiện | Kết quả kỳ vọng xác minh |
+|---|:---:|---|---|---|
+| **Cảnh 1: Mở sổ tiết kiệm** | 1.0 phút | Faucet 1,000 USDC $\rightarrow$ Mở sổ Plan 0 (90 ngày) $\rightarrow$ Approve USDC $\rightarrow$ Confirm Open. | Ví 1 (User) | Hiện chứng chỉ NFT #1, Countdown timer ~90 ngày, Snapshot APR 2.25%, Lãi dự kiến: **5.547945 USDC**. |
+| **Cảnh 2: Nhảy thời gian & Rút đúng hạn** | 1.0 phút | Bật modal `DevTimeTravel`, tua nhanh **+90 Ngày** $\rightarrow$ Countdown chuyển sang badge xanh *"Đã Đáo Hạn"* $\rightarrow$ Bấm "Rút Đúng Hạn". | Ví 1 (User) | Nhận về 1,000 USDC gốc và **5.547945 USDC** lãi từ Vault. Sổ chuyển sang tab *"Lịch Sử Tất Toán"*. |
+| **Cảnh 3: Rút trước hạn chịu phạt** | 1.0 phút | Mở sổ mới 1,000 USDC (NFT #2) $\rightarrow$ Bấm "Rút Trước Hạn" ngay $\rightarrow$ Xác nhận phạt 5.00%. | Ví 1 (User) | Ví 1 nhận về 950 USDC, số dư Ví 2 (`feeReceiver`) tăng đúng **50 USDC**. |
+| **Cảnh 4: Tái tục & Admin Solvency Guard C2** | 1.5 phút | Mở sổ mới 1,000 USDC, nhảy thời gian +90 ngày $\rightarrow$ Bấm "Tái Tục (Renew)" sang Plan 1 $\implies$ Gốc mới **1,005.547945 USDC**.<br>Chuyển sang Ví 0 (Admin): Mở tab Admin Panel, chỉ rõ `Vault Balance` và `totalCommittedInterest`. Thử rút vượt mức cam kết $\implies$ Solvency Guard C2 chặn rút. | Ví 1 $\rightarrow$ Ví 0 (Admin) | Gốc mới compound chính xác. Solvency Guard C2 hiển thị thông báo an toàn, bảo vệ thanh khoản. |
+
+---
+
+## 11. BẢN ĐỒ ÁNH XẠ (TRACEABILITY MATRIX)
 
 - **Q-ID**: Q1 (NFT transfer) $\rightarrow$ L223; Q2 (Empty vault C1) $\rightarrow$ L233; Q3 (Dead bot backdate) $\rightarrow$ L338; Q4 (Rounding floor) $\rightarrow$ TC-21; Q5 (Boundaries) $\rightarrow$ L227, 258, 327; Q6 (Disabled plan) $\rightarrow$ L186, 289; Q7 (CEI/Reentrancy) $\rightarrow$ L229, L78.
 - **Bonus**: C1 (Deferred Interest / All-or-nothing) $\rightarrow$ L233-248, L369-385; C2 (Solvency Guard) $\rightarrow$ VaultManager L64-71, SavingCore L105.
 - **Decisions**: D1–D34 đăng ký đầy đủ tại Mục 15 của `PROJECT_OVERVIEW.md`.
-
