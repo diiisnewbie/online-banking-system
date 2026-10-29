@@ -1,7 +1,18 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { formatUnits6 } from '../utils/formatters';
-import { Activity, ArrowUpRight, ArrowDownLeft, RefreshCw, Loader2 } from 'lucide-react';
+import { Card } from './ui/Card';
+import { Skeleton } from './ui/Skeleton';
+import {
+  Activity,
+  ArrowUpRight,
+  ArrowDownLeft,
+  RefreshCw,
+  Gift,
+  ShieldAlert,
+  Clock,
+  ExternalLink,
+} from 'lucide-react';
 
 interface ActivityLogProps {
   savingCore: ethers.Contract | null;
@@ -74,8 +85,8 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
             type: isEarly ? 'early' : 'withdraw',
             depositId: ev.args.depositId.toString(),
             title: isEarly
-              ? `Rút trước hạn NFT #${ev.args.depositId.toString()} (Chịu phạt)`
-              : `Rút đúng hạn NFT #${ev.args.depositId.toString()} (+${formatUnits6(interest)} lãi)`,
+              ? `Rút trước hạn NFT #${ev.args.depositId.toString()} (Phạt 5% gốc)`
+              : `Rút đúng hạn NFT #${ev.args.depositId.toString()} (+${formatUnits6(interest)} USDC lãi)`,
             amount: `+${formatUnits6(principal + interest)} USDC`,
             blockNumber: ev.blockNumber,
             txHash: ev.transactionHash,
@@ -88,7 +99,7 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
             id: `renew-${ev.transactionHash}-${ev.args.newDepositId}`,
             type: 'renew',
             depositId: ev.args.newDepositId.toString(),
-            title: `Tái tục sổ cũ #${ev.args.oldDepositId.toString()} -> NFT mới #${ev.args.newDepositId.toString()}`,
+            title: `Tái tục sổ cũ #${ev.args.oldDepositId.toString()} ➔ NFT #${ev.args.newDepositId.toString()}`,
             amount: `+${formatUnits6(BigInt(ev.args.newPrincipal))} USDC (Gốc mới)`,
             blockNumber: ev.blockNumber,
             txHash: ev.transactionHash,
@@ -101,14 +112,14 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
             id: `deferred-${ev.transactionHash}-${ev.args.depositId}`,
             type: 'deferred',
             depositId: ev.args.depositId.toString(),
-            title: `Hoãn trả lãi (C1) cho NFT #${ev.args.depositId.toString()}`,
+            title: `Hoãn trả lãi (C1 Ghi Nợ) NFT #${ev.args.depositId.toString()}`,
             amount: `+${formatUnits6(BigInt(ev.args.amount))} USDC (Nợ)`,
             blockNumber: ev.blockNumber,
             txHash: ev.transactionHash,
           });
         }
 
-        // 4. Claim events (C1)
+        // 5. Claim events (C1)
         for (const ev of claimEvents as any[]) {
           items.push({
             id: `claim-${ev.transactionHash}-${ev.args.depositId}`,
@@ -135,68 +146,100 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
   }, [savingCore, account, refreshTrigger]);
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-2xl p-5 space-y-4 shadow-lg">
-      <div className="flex items-center space-x-2 text-indigo-400 font-bold text-sm border-b border-slate-800 pb-3">
-        <Activity className="w-4 h-4" />
-        <span>Lịch Sử Giao Dịch On-Chain Gần Đây (Activity Log)</span>
+    <Card className="p-5 space-y-4">
+      {/* Header */}
+      <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+        <div className="flex items-center space-x-2.5 text-white font-extrabold text-base">
+          <div className="p-2 rounded-xl bg-indigo-950/60 border border-indigo-700/40 text-indigo-400">
+            <Activity className="w-4 h-4" />
+          </div>
+          <div>
+            <span>Lịch Sử Giao Dịch On-Chain</span>
+            <div className="text-[11px] text-slate-400 font-normal">
+              Truy vấn trực tiếp từ các sự kiện indexed trên hợp đồng SavingCore
+            </div>
+          </div>
+        </div>
+
+        <div className="text-xs text-slate-400 font-mono">
+          Tổng: <strong className="text-slate-200">{logs.length}</strong> sự kiện
+        </div>
       </div>
 
+      {/* Loading Skeletons */}
       {isLoading ? (
-        <div className="py-8 flex items-center justify-center space-x-2 text-slate-400 text-xs">
-          <Loader2 className="w-4 h-4 animate-spin text-indigo-400" />
-          <span>Đang truy vấn sự kiện on-chain...</span>
+        <div className="space-y-3 py-2">
+          <Skeleton className="h-12 w-full rounded-xl" />
+          <Skeleton className="h-12 w-full rounded-xl" />
+          <Skeleton className="h-12 w-full rounded-xl" />
         </div>
       ) : logs.length > 0 ? (
-        <div className="divide-y divide-slate-800/80 max-h-72 overflow-y-auto pr-1">
-          {logs.map((log) => (
-            <div key={log.id} className="py-2.5 flex items-center justify-between text-xs">
-              <div className="flex items-center space-x-3">
-                <div
-                  className={`p-2 rounded-xl ${
-                    log.type === 'open'
-                      ? 'bg-indigo-950/70 text-indigo-400'
-                      : log.type === 'early'
-                      ? 'bg-amber-950/70 text-amber-400'
-                      : log.type === 'deferred'
-                      ? 'bg-purple-950/70 text-purple-400'
-                      : 'bg-emerald-950/70 text-emerald-400'
-                  }`}
-                >
-                  {log.type === 'open' ? (
-                    <ArrowUpRight className="w-3.5 h-3.5" />
-                  ) : log.type === 'renew' ? (
-                    <RefreshCw className="w-3.5 h-3.5" />
-                  ) : (
-                    <ArrowDownLeft className="w-3.5 h-3.5" />
-                  )}
-                </div>
-                <div>
-                  <div className="font-semibold text-slate-200">{log.title}</div>
-                  <div className="font-mono text-[10px] text-slate-500">
-                    Block #{log.blockNumber} • Tx: {log.txHash.slice(0, 10)}...{log.txHash.slice(-6)}
+        <div className="divide-y divide-slate-800/80 max-h-96 overflow-y-auto pr-1">
+          {logs.map((log) => {
+            let iconElement = <ArrowDownLeft className="w-4 h-4" />;
+            let badgeBg = 'bg-emerald-950/70 text-emerald-400 border border-emerald-800/50';
+            let amountColor = 'text-emerald-400';
+
+            if (log.type === 'open') {
+              iconElement = <ArrowUpRight className="w-4 h-4" />;
+              badgeBg = 'bg-indigo-950/70 text-indigo-400 border border-indigo-800/50';
+              amountColor = 'text-slate-300';
+            } else if (log.type === 'early') {
+              iconElement = <ShieldAlert className="w-4 h-4" />;
+              badgeBg = 'bg-rose-950/70 text-rose-400 border border-rose-800/50';
+              amountColor = 'text-amber-400';
+            } else if (log.type === 'renew') {
+              iconElement = <RefreshCw className="w-4 h-4" />;
+              badgeBg = 'bg-purple-950/70 text-purple-300 border border-purple-800/50';
+              amountColor = 'text-purple-300';
+            } else if (log.type === 'deferred') {
+              iconElement = <Clock className="w-4 h-4" />;
+              badgeBg = 'bg-amber-950/70 text-amber-400 border border-amber-800/50';
+              amountColor = 'text-amber-300';
+            } else if (log.type === 'claim') {
+              iconElement = <Gift className="w-4 h-4" />;
+              badgeBg = 'bg-emerald-950/70 text-emerald-300 border border-emerald-800/50';
+              amountColor = 'text-emerald-400';
+            }
+
+            return (
+              <div
+                key={log.id}
+                className="py-3 flex items-center justify-between text-xs hover:bg-slate-950/40 px-2 rounded-xl transition"
+              >
+                <div className="flex items-center space-x-3">
+                  <div className={`p-2.5 rounded-xl ${badgeBg} shrink-0`}>
+                    {iconElement}
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-200 text-xs">{log.title}</div>
+                    <div className="flex items-center space-x-2 text-[10px] text-slate-400 font-mono mt-0.5">
+                      <span>Block #{log.blockNumber}</span>
+                      <span>•</span>
+                      <span className="flex items-center space-x-1">
+                        <span>Tx: {log.txHash.slice(0, 8)}...{log.txHash.slice(-6)}</span>
+                        <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
+                      </span>
+                    </div>
                   </div>
                 </div>
-              </div>
 
-              <div
-                className={`font-mono font-bold ${
-                  log.type === 'open'
-                    ? 'text-slate-400'
-                    : log.type === 'deferred'
-                    ? 'text-purple-300'
-                    : 'text-emerald-400'
-                }`}
-              >
-                {log.amount}
+                <div className={`font-mono font-black text-sm tabular-nums ${amountColor}`}>
+                  {log.amount}
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       ) : (
-        <div className="py-6 text-center text-xs text-slate-500">
-          Chưa có giao dịch on-chain nào được ghi nhận cho ví này.
+        <div className="py-12 text-center space-y-2">
+          <Activity className="w-8 h-8 text-slate-400 mx-auto" />
+          <div className="text-xs font-semibold text-slate-300">Chưa có giao dịch on-chain nào</div>
+          <div className="text-[11px] text-slate-400">
+            Các hoạt động mở sổ, tất toán, nhận lãi và tái tục sẽ hiển thị tại đây.
+          </div>
         </div>
       )}
-    </div>
+    </Card>
   );
 };

@@ -1,8 +1,8 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 
-const HARDHAT_CHAIN_ID = 31337;
-const HARDHAT_CHAIN_HEX = '0x7a69';
+const TARGET_CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID || 31337);
+const TARGET_CHAIN_HEX = '0x' + TARGET_CHAIN_ID.toString(16);
 const LOCAL_RPC_URL = import.meta.env.VITE_RPC_URL || 'http://127.0.0.1:8545';
 
 export function useWeb3() {
@@ -64,16 +64,16 @@ export function useWeb3() {
     try {
       await window.ethereum.request({
         method: 'wallet_switchEthereumChain',
-        params: [{ chainId: HARDHAT_CHAIN_HEX }],
+        params: [{ chainId: TARGET_CHAIN_HEX }],
       });
     } catch (switchError: any) {
-      if (switchError.code === 4902) {
+      if (switchError.code === 4902 && TARGET_CHAIN_ID === 31337) {
         try {
           await window.ethereum.request({
             method: 'wallet_addEthereumChain',
             params: [
               {
-                chainId: HARDHAT_CHAIN_HEX,
+                chainId: TARGET_CHAIN_HEX,
                 chainName: 'Hardhat Localhost',
                 nativeCurrency: { name: 'ETH', symbol: 'ETH', decimals: 18 },
                 rpcUrls: [LOCAL_RPC_URL],
@@ -100,7 +100,7 @@ export function useWeb3() {
       const currentChainId = Number(network.chainId);
       setChainId(currentChainId);
 
-      if (currentChainId !== HARDHAT_CHAIN_ID) {
+      if (currentChainId !== TARGET_CHAIN_ID) {
         await switchNetwork();
       }
 
@@ -161,6 +161,6 @@ export function useWeb3() {
     currentSimulatedTime,
     syncBlockTime,
     connectWallet,
-    isCorrectNetwork: chainId === HARDHAT_CHAIN_ID,
+    isCorrectNetwork: chainId === TARGET_CHAIN_ID,
   };
 }

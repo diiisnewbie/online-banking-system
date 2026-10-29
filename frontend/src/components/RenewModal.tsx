@@ -1,10 +1,13 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { DepositCertificate, SavingPlan } from '../contracts/types';
-import { formatUnits6, formatBps } from '../utils/formatters';
+import { formatUnits6, formatBps, formatTimestamp } from '../utils/formatters';
 import { calculatePreviewInterest } from '../utils/interest';
 import { parseContractError } from '../utils/errors';
-import { RefreshCw, X, Loader2, AlertTriangle, AlertCircle } from 'lucide-react';
+import { Modal } from './ui/Modal';
+import { Button } from './ui/Button';
+import { useToast } from './ui/ToastContext';
+import { RefreshCw, CheckCircle2, AlertTriangle, AlertCircle, Calendar } from 'lucide-react';
 
 interface RenewModalProps {
   isOpen: boolean;
@@ -14,8 +17,11 @@ interface RenewModalProps {
   savingCore: ethers.Contract | null;
   vault: ethers.Contract | null;
   usdc: ethers.Contract | null;
+  currentSimulatedTime?: bigint;
   onSuccess: () => Promise<void>;
 }
+
+type TxStatus = 'idle' | 'waiting_signature' | 'confirming' | 'success';
 
 export const RenewModal: React.FC<RenewModalProps> = ({
   isOpen,
@@ -25,12 +31,15 @@ export const RenewModal: React.FC<RenewModalProps> = ({
   savingCore,
   vault,
   usdc,
+  currentSimulatedTime,
   onSuccess,
 }) => {
+  const { addToast } = useToast();
   const [selectedPlanId, setSelectedPlanId] = useState<bigint>(0n);
   const [vaultBalance, setVaultBalance] = useState<bigint>(0n);
-  const [isSubmitting, setIsSubmitting] = useState(false);
+  const [txStatus, setTxStatus] = useState<TxStatus>('idle');
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [txHash, setTxHash] = useState<string | null>(null);
 
   useEffect(() => {
     if (certificate) {
@@ -53,6 +62,7 @@ export const RenewModal: React.FC<RenewModalProps> = ({
   useEffect(() => {
     if (isOpen) {
       setErrorMsg(null);
+      setTxStatus('idle');
       checkVaultLiquidity();
     }
   }, [isOpen, usdc, vault]);
@@ -69,6 +79,11 @@ export const RenewModal: React.FC<RenewModalProps> = ({
 
   const targetPlan = plans.find((p) => p.planId === selectedPlanId) || plans[0];
 
+  // Ngày đáo hạn mới ước tính
+  const nowSec = currentSimulatedTime || BigInt(Math.floor(Date.now() / 1000));
+  const newTenorSeconds = targetPlan ? targetPlan.tenorDays * 86400n : 0n;
+  const newMaturityAt = nowSec + newTenorSeconds;
+
   // Kiểm tra thanh khoản Vault
   const isVaultInsufficient = vaultBalance < oldInterest;
 
@@ -76,136 +91,193 @@ export const RenewModal: React.FC<RenewModalProps> = ({
   let limitError: string | null = null;
   if (targetPlan) {
     if (targetPlan.minDeposit > 0n && newPrincipal < targetPlan.minDeposit) {
-      limitError = `Gốc mới (${formatUnits6(newPrincipal)} USDC) nhỏ hơn hạn mức tối thiểu (${formatUnits6(targetPlan.minDeposit)} USDC)`;
+      limitError = `Gốc mới (${formatUnits6(newPrincipal)} USDC) nhỏ hơn mức tối thiểu (${formatUnits6(targetPlan.minDeposit)} USDC)`;
     } else if (targetPlan.maxDeposit > 0n && newPrincipal > targetPlan.maxDeposit) {
-      limitError = `Gốc mới (${formatUnits6(newPrincipal)} USDC) vượt quá hạn mức tối đa (${formatUnits6(targetPlan.maxDeposit)} USDC)`;
+      limitError = `Gốc mới (${formatUnits6(newPrincipal)} USDC) vượt mức tối đa (${formatUnits6(targetPlan.maxDeposit)} USDC)`;
     }
   }
 
   const handleRenew = async () => {
     if (!savingCore || isVaultInsufficient || limitError) return;
-    setIsSubmitting(true);
+    setTxStatus('waiting_signature');
     setErrorMsg(null);
+    setTxHash(null);
+
     try {
       const tx = await savingCore.renewDeposit(certificate.depositId, selectedPlanId);
-      await tx.wait();
+      setTxStatus('confirming');
+      setTxHash(tx.hash);
+
+      const receipt = await tx.wait();
+      setTxStatus('success');
+
+      addToast(
+        'success',
+        `Tái tục thành công! Sổ mới đã được tạo với gốc mới ${formatUnits6(newPrincipal)} USDC (đã nhập lãi kép).`,
+        {
+          title: 'Tái Tục Thành Công',
+          txHash: receipt?.hash || tx.hash,
+        }
+      );
+
       await onSuccess();
-      onClose();
+      setTimeout(() => {
+        setTxStatus('idle');
+        onClose();
+      }, 1500);
     } catch (err: any) {
       console.error('Renew failed:', err);
-      setErrorMsg(parseContractError(err, { core: savingCore, vault }));
-    } finally {
-      setIsSubmitting(false);
+      const parsed = parseContractError(err, { core: savingCore, vault });
+      setErrorMsg(parsed);
+      setTxStatus('idle');
+      addToast('error', parsed, { title: 'Tái Tục Thất Bại' });
     }
   };
 
+  const handleModalClose = () => {
+    if (txStatus === 'waiting_signature' || txStatus === 'confirming') return;
+    setTxStatus('idle');
+    setErrorMsg(null);
+    onClose();
+  };
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-      <div className="bg-slate-900 border border-indigo-500/40 rounded-2xl p-6 max-w-lg w-full shadow-2xl space-y-5 relative">
-        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
-          <div className="flex items-center space-x-2 text-indigo-400">
-            <RefreshCw className="w-5 h-5" />
-            <h3 className="font-bold text-white text-base">Tái Tục Sổ Tiết Kiệm (Manual Renew)</h3>
+    <Modal
+      isOpen={isOpen}
+      onClose={handleModalClose}
+      title="Tái Tục Sổ Tiết Kiệm (Manual Renew)"
+      subtitle={`Nhập lãi vào vốn gốc và gia hạn kỳ hạn mới cho NFT #${certificate.depositId.toString()}`}
+      icon={<RefreshCw className="w-5 h-5 text-indigo-400" />}
+      maxWidth="lg"
+    >
+      {errorMsg && (
+        <div className="p-3 bg-rose-950/60 border border-rose-800/60 rounded-xl text-xs text-rose-300">
+          {errorMsg}
+        </div>
+      )}
+
+      {/* Cảnh báo thiếu thanh khoản Vault */}
+      {isVaultInsufficient && (
+        <div className="p-3 bg-amber-950/50 border border-amber-800/50 rounded-xl text-xs text-amber-300 space-y-1">
+          <div className="flex items-center space-x-1.5 font-bold text-amber-200">
+            <AlertTriangle className="w-4 h-4 shrink-0 text-amber-400" />
+            <span>Quỹ trả lãi Vault hiện không đủ tiền nhập lãi:</span>
           </div>
-          <button onClick={onClose} className="text-slate-400 hover:text-white p-1 rounded-lg">
-            <X className="w-5 h-5" />
-          </button>
+          <p>
+            Cần {formatUnits6(oldInterest)} USDC để nhập gốc, nhưng Vault chỉ còn {formatUnits6(vaultBalance)} USDC. Giao dịch tái tục sẽ bị hoàn tác. Bạn nên chọn <strong>Rút đúng hạn</strong> để nhận 100% gốc ngay và hoãn trả lãi theo cơ chế C1.
+          </p>
+        </div>
+      )}
+
+      {/* Financial Summary */}
+      <div className="bg-slate-950/70 border border-slate-800 rounded-xl p-4 space-y-2.5 text-xs">
+        <div className="flex justify-between items-center text-slate-300">
+          <span>Tiền gốc kỳ cũ:</span>
+          <span className="font-mono text-white tabular-nums">{formatUnits6(certificate.principal)} USDC</span>
         </div>
 
-        {errorMsg && (
-          <div className="p-3 bg-rose-950/60 border border-rose-800/60 rounded-xl text-xs text-rose-300">
-            {errorMsg}
-          </div>
-        )}
+        <div className="flex justify-between items-center text-emerald-400">
+          <span>Tiền lãi kỳ cũ (Chuyển từ Vault sang):</span>
+          <span className="font-mono font-bold tabular-nums">+{formatUnits6(oldInterest)} USDC</span>
+        </div>
 
-        {/* Cảnh báo thiếu thanh khoản Vault */}
-        {isVaultInsufficient && (
-          <div className="p-3 bg-amber-950/50 border border-amber-800/50 rounded-xl text-xs text-amber-300 space-y-1">
-            <div className="flex items-center space-x-1.5 font-bold text-amber-200">
-              <AlertTriangle className="w-4 h-4 shrink-0" />
-              <span>Quỹ trả lãi của ngân hàng tạm thời thiếu tiền:</span>
+        <div className="border-t border-slate-800 pt-2 flex justify-between items-center text-sm">
+          <span className="font-bold text-slate-200">Vốn gốc kỳ mới (Compound):</span>
+          <span className="font-mono font-black text-indigo-300 tabular-nums">
+            {formatUnits6(newPrincipal)} USDC
+          </span>
+        </div>
+
+        {targetPlan && (
+          <div className="border-t border-slate-800/80 pt-2 space-y-1.5 text-slate-400 text-[11px]">
+            <div className="flex justify-between items-center">
+              <span>Gói mới được chọn:</span>
+              <span className="font-semibold text-white">
+                Gói #{targetPlan.planId.toString()} ({targetPlan.tenorDays.toString()} ngày - {formatBps(targetPlan.aprBps)})
+              </span>
             </div>
-            <p>
-              Cần {formatUnits6(oldInterest)} USDC để nhập gốc, nhưng Vault chỉ còn {formatUnits6(vaultBalance)} USDC.
-              Giao dịch tái tục sẽ bị hoàn tác ([D24]). Bạn nên chọn <strong>Rút đúng hạn</strong> để nhận 100% gốc ngay và hoãn trả lãi theo cơ chế C1.
-            </p>
+            <div className="flex justify-between items-center">
+              <span className="flex items-center space-x-1">
+                <Calendar className="w-3.5 h-3.5" />
+                <span>Ngày đáo hạn mới dự kiến:</span>
+              </span>
+              <span className="font-semibold text-slate-200">
+                {formatTimestamp(newMaturityAt)}
+              </span>
+            </div>
           </div>
         )}
+      </div>
 
-        {/* Tóm tắt lãi nhập gốc */}
-        <div className="bg-slate-800/50 border border-slate-700/60 rounded-xl p-3.5 space-y-2 text-xs">
-          <div className="flex justify-between text-slate-300">
-            <span>Tiền gốc kỳ cũ:</span>
-            <span className="font-mono text-white">{formatUnits6(certificate.principal)} USDC</span>
-          </div>
-          <div className="flex justify-between text-emerald-400">
-            <span>Tiền lãi kỳ cũ (Chuyển từ Vault sang):</span>
-            <span className="font-mono font-bold">+{formatUnits6(oldInterest)} USDC</span>
-          </div>
-          <div className="border-t border-slate-700 pt-2 flex justify-between items-center text-sm">
-            <span className="font-bold text-slate-200">Vốn gốc kỳ mới (Compound):</span>
-            <span className="font-mono font-extrabold text-indigo-300">
-              {formatUnits6(newPrincipal)} USDC
-            </span>
-          </div>
-        </div>
-
-        {/* Chọn gói mới */}
-        <div className="space-y-1.5">
-          <label className="text-xs font-semibold text-slate-300">Chọn Gói Cho Kỳ Tiếp Theo:</label>
-          <div className="grid grid-cols-3 gap-2">
-            {plans
-              .filter((p) => p.enabled)
-              .map((p) => (
+      {/* Chọn gói mới */}
+      <div className="space-y-1.5">
+        <label className="text-xs font-semibold text-slate-300">Chọn Gói Cho Kỳ Tiếp Theo:</label>
+        <div className="grid grid-cols-3 gap-2">
+          {plans
+            .filter((p) => p.enabled)
+            .map((p) => {
+              const isSelected = selectedPlanId === p.planId;
+              return (
                 <button
                   key={p.planId.toString()}
                   type="button"
                   onClick={() => setSelectedPlanId(p.planId)}
                   className={`p-2.5 rounded-xl border text-left transition ${
-                    selectedPlanId === p.planId
-                      ? 'bg-indigo-950/60 border-indigo-500 text-white'
-                      : 'bg-slate-800/60 border-slate-700 text-slate-300 hover:border-slate-600'
+                    isSelected
+                      ? 'bg-indigo-950/70 border-indigo-500 text-white shadow-sm ring-1 ring-indigo-500/50'
+                      : 'bg-slate-900/60 border-slate-800 text-slate-300 hover:border-slate-700'
                   }`}
                 >
-                  <div className="text-xs font-bold">Plan #{p.planId.toString()}</div>
-                  <div className="text-indigo-400 text-sm font-extrabold">{p.tenorDays.toString()} Ngày</div>
-                  <div className="text-[11px] text-emerald-400 font-semibold">{formatBps(p.aprBps)}/năm</div>
+                  <div className="text-[11px] font-mono text-slate-400">Gói #{p.planId.toString()}</div>
+                  <div className="text-indigo-400 text-sm font-black tabular-nums">{p.tenorDays.toString()} Ngày</div>
+                  <div className="text-[11px] text-emerald-400 font-bold tabular-nums">{formatBps(p.aprBps)}/năm</div>
                 </button>
-              ))}
+              );
+            })}
+        </div>
+        {limitError && (
+          <div className="flex items-center space-x-1.5 text-rose-400 text-xs mt-1">
+            <AlertCircle className="w-3.5 h-3.5 shrink-0" />
+            <span>{limitError}</span>
           </div>
-          {limitError && (
-            <div className="flex items-center space-x-1.5 text-rose-400 text-xs mt-1">
-              <AlertCircle className="w-3.5 h-3.5 shrink-0" />
-              <span>{limitError}</span>
-            </div>
-          )}
-        </div>
-
-        <div className="flex space-x-3 pt-2">
-          <button
-            onClick={onClose}
-            disabled={isSubmitting}
-            className="flex-1 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-xl text-xs font-semibold transition"
-          >
-            Đóng
-          </button>
-          <button
-            onClick={handleRenew}
-            disabled={isSubmitting || isVaultInsufficient || !!limitError}
-            className="flex-1 py-2.5 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-white rounded-xl text-xs font-bold transition flex items-center justify-center space-x-1.5"
-          >
-            {isSubmitting ? (
-              <>
-                <Loader2 className="w-4 h-4 animate-spin" />
-                <span>Đang xử lý tái tục...</span>
-              </>
-            ) : (
-              <span>Xác Nhận Tái Tục</span>
-            )}
-          </button>
-        </div>
+        )}
       </div>
-    </div>
+
+      {/* Action Buttons */}
+      <div className="flex space-x-3 pt-2">
+        <Button
+          variant="secondary"
+          size="md"
+          disabled={txStatus === 'waiting_signature' || txStatus === 'confirming'}
+          onClick={handleModalClose}
+          className="flex-1"
+        >
+          Đóng
+        </Button>
+
+        <Button
+          variant="primary"
+          size="md"
+          isLoading={txStatus === 'waiting_signature' || txStatus === 'confirming'}
+          loadingText={
+            txStatus === 'waiting_signature'
+              ? 'Đang chờ ví ký...'
+              : 'Đang xác nhận tái tục...'
+          }
+          disabled={txStatus === 'success' || isVaultInsufficient || !!limitError}
+          onClick={handleRenew}
+          className="flex-1"
+          icon={txStatus === 'success' ? <CheckCircle2 className="w-4 h-4" /> : <RefreshCw className="w-4 h-4" />}
+        >
+          {txStatus === 'success' ? 'Đã Tái Tục' : 'Xác Nhận Tái Tục'}
+        </Button>
+      </div>
+
+      {txHash && (
+        <div className="text-center font-mono text-[10px] text-slate-400 pt-1">
+          Tx: {txHash.slice(0, 12)}...{txHash.slice(-8)}
+        </div>
+      )}
+    </Modal>
   );
 };
-

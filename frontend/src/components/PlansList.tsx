@@ -1,7 +1,11 @@
 import React from 'react';
 import { SavingPlan } from '../contracts/types';
 import { formatBps, formatUnits6 } from '../utils/formatters';
-import { ShieldCheck, TrendingUp, AlertCircle, Calendar } from 'lucide-react';
+import { TrendingUp, AlertCircle, Calendar, Coins } from 'lucide-react';
+import { Badge } from './ui/Badge';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import { CardSkeleton } from './ui/Skeleton';
 
 interface PlansListProps {
   plans: SavingPlan[];
@@ -17,106 +21,154 @@ export const PlansList: React.FC<PlansListProps> = ({
   onSelectPlan,
 }) => {
   return (
-    <div className="space-y-4">
-      <div className="flex items-center justify-between">
+    <div className="space-y-6">
+      {/* Section Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-slate-800/80 pb-4">
         <div>
-          <h2 className="text-xl font-bold text-white flex items-center space-x-2">
+          <h2 className="text-xl font-extrabold text-white flex items-center space-x-2">
             <TrendingUp className="w-5 h-5 text-indigo-400" />
-            <span>Gói Tiết Kiệm Kỳ Hạn (On-Chain Plans)</span>
+            <span>Các Gói Tiết Kiệm Kỳ Hạn</span>
           </h2>
-          <p className="text-xs text-slate-400 mt-0.5">
-            Đọc trực tiếp từ hàm <code className="text-indigo-300">getAllPlans()</code> trên smart contract SavingCore [D29]
+          <p className="text-xs text-slate-400 mt-1">
+            Lãi suất cam kết cố định theo mô hình Snapshot APR, không chịu rủi ro biến động thị trường.
           </p>
+        </div>
+        <div className="text-xs text-slate-500 font-mono">
+          Nguồn: <code className="text-indigo-400">SavingCore.getAllPlans()</code>
         </div>
       </div>
 
+      {/* Loading Skeletons */}
       {isLoading && (
-        <div className="p-8 text-center bg-slate-800/40 rounded-xl border border-slate-700/60 text-slate-400 text-sm">
-          Đang truy vấn danh sách gói từ blockchain...
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          <CardSkeleton />
+          <CardSkeleton />
+          <CardSkeleton />
         </div>
       )}
 
+      {/* Error / Empty Scaffold */}
       {error && plans.length === 0 && !isLoading && (
-        <div className="p-6 bg-slate-800/30 rounded-xl border border-dashed border-slate-700 text-center space-y-2">
-          <AlertCircle className="w-8 h-8 text-indigo-400/80 mx-auto" />
-          <p className="text-sm font-medium text-slate-300">
-            Khung hiển thị gói tiết kiệm on-chain đã sẵn sàng (N3 Scaffold).
-          </p>
-          <p className="text-xs text-slate-400 max-w-md mx-auto">
-            Dữ liệu sẽ tự động được nạp đầy đủ ở Phase 4 sau khi deploy contract và seed 3 gói on-chain.
-          </p>
-        </div>
+        <Card className="p-8 text-center space-y-3 max-w-md mx-auto border-dashed">
+          <div className="w-12 h-12 bg-rose-950/60 text-rose-400 rounded-2xl flex items-center justify-center mx-auto border border-rose-800/50">
+            <AlertCircle className="w-6 h-6" />
+          </div>
+          <div>
+            <h4 className="text-sm font-bold text-white">Chưa Có Gói Tiết Kiệm Nào</h4>
+            <p className="text-xs text-slate-400 mt-1">
+              {error || 'Vui lòng kiểm tra kết nối với node blockchain Hardhat.'}
+            </p>
+          </div>
+        </Card>
       )}
 
-      {plans.length > 0 && (
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-          {plans.map((plan) => (
-            <div
-              key={plan.planId.toString()}
-              className="bg-slate-800/80 border border-slate-700 rounded-xl p-5 hover:border-indigo-500/50 transition flex flex-col justify-between"
-            >
-              <div className="space-y-3">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-mono font-medium px-2 py-0.5 rounded bg-indigo-950/80 text-indigo-300 border border-indigo-800/40">
-                    Gói #{plan.planId.toString()}
-                  </span>
-                  <span
-                    className={`text-xs px-2 py-0.5 rounded-full font-medium ${
-                      plan.enabled
-                        ? 'bg-emerald-950/60 text-emerald-400 border border-emerald-800/30'
-                        : 'bg-rose-950/60 text-rose-400 border border-rose-800/30'
-                    }`}
-                  >
-                    {plan.enabled ? 'Đang mở' : 'Tạm dừng'}
-                  </span>
-                </div>
+      {/* Plans Grid */}
+      {plans.length > 0 && !isLoading && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
+          {plans.map((plan) => {
+            const isEnabled = plan.enabled;
 
-                <div>
-                  <div className="text-3xl font-extrabold text-white tracking-tight">
-                    {formatBps(plan.aprBps)}
-                  </div>
-                  <div className="text-xs text-slate-400 font-medium">Lãi suất năm (APR)</div>
-                </div>
-
-                <div className="space-y-1.5 pt-2 border-t border-slate-700/60 text-xs">
-                  <div className="flex justify-between text-slate-300">
-                    <span className="text-slate-400 flex items-center space-x-1">
-                      <Calendar className="w-3.5 h-3.5" />
-                      <span>Kỳ hạn:</span>
-                    </span>
-                    <span className="font-semibold text-white">{plan.tenorDays.toString()} ngày</span>
-                  </div>
-                  <div className="flex justify-between text-slate-300">
-                    <span className="text-slate-400">Gửi tối thiểu:</span>
-                    <span>
-                      {plan.minDeposit === 0n ? 'Không giới hạn' : `${formatUnits6(plan.minDeposit)} USDC`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-slate-300">
-                    <span className="text-slate-400">Gửi tối đa:</span>
-                    <span>
-                      {plan.maxDeposit === 0n ? 'Không giới hạn' : `${formatUnits6(plan.maxDeposit)} USDC`}
-                    </span>
-                  </div>
-                  <div className="flex justify-between text-slate-300">
-                    <span className="text-slate-400">Phạt rút sớm:</span>
-                    <span className="text-amber-400 font-medium">
-                      {formatBps(plan.earlyWithdrawPenaltyBps)}
-                    </span>
-                  </div>
-                </div>
-              </div>
-
-              <button
-                onClick={() => onSelectPlan && onSelectPlan(plan)}
-                disabled={!plan.enabled}
-                className="mt-5 w-full py-2 px-3 bg-indigo-600 hover:bg-indigo-500 disabled:opacity-40 disabled:hover:bg-indigo-600 text-white rounded-lg text-xs font-semibold transition flex items-center justify-center space-x-1.5"
+            return (
+              <Card
+                key={plan.planId.toString()}
+                variant="interactive"
+                className={`p-6 flex flex-col justify-between relative overflow-hidden transition-all ${
+                  !isEnabled ? 'opacity-60 grayscale-[40%]' : ''
+                }`}
               >
-                <ShieldCheck className="w-4 h-4" />
-                <span>Mở sổ tiết kiệm</span>
-              </button>
-            </div>
-          ))}
+                {/* Decorative Top Accent line */}
+                {isEnabled && (
+                  <div className="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-indigo-500 to-emerald-400" />
+                )}
+
+                <div className="space-y-4">
+                  {/* Card Header: Plan ID + Status Badge */}
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-mono font-bold px-2.5 py-1 rounded-lg bg-indigo-950/60 text-indigo-300 border border-indigo-800/40">
+                      Gói #{plan.planId.toString()}
+                    </span>
+
+                    <Badge variant={isEnabled ? 'success' : 'danger'} dot={isEnabled}>
+                      {isEnabled ? 'Đang mở' : 'Tạm dừng'}
+                    </Badge>
+                  </div>
+
+                  {/* Tenor Display (To, rõ ràng) */}
+                  <div className="pt-1">
+                    <div className="flex items-baseline space-x-1.5">
+                      <span className="text-3xl font-black text-white tracking-tight tabular-nums">
+                        {plan.tenorDays.toString()}
+                      </span>
+                      <span className="text-sm font-bold text-slate-400">Ngày</span>
+                    </div>
+                    <div className="text-[11px] text-slate-500 font-medium">Kỳ hạn gửi cố định</div>
+                  </div>
+
+                  {/* APR (Nổi bật) */}
+                  <div className="p-3.5 rounded-xl bg-slate-950/60 border border-slate-800/80 flex items-center justify-between">
+                    <div>
+                      <div className="text-[11px] text-slate-400 font-medium">Lãi suất năm (APR)</div>
+                      <div className="text-2xl font-black text-emerald-400 tracking-tight tabular-nums mt-0.5">
+                        {formatBps(plan.aprBps)}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-[11px] text-slate-400 font-medium">Phạt rút sớm</div>
+                      <div className="text-sm font-bold text-amber-400 tabular-nums mt-0.5">
+                        {formatBps(plan.earlyWithdrawPenaltyBps)}
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Parameters Details */}
+                  <div className="space-y-2 pt-2 border-t border-slate-800/60 text-xs">
+                    <div className="flex justify-between items-center text-slate-300">
+                      <span className="text-slate-400 flex items-center space-x-1.5">
+                        <Coins className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Gửi tối thiểu:</span>
+                      </span>
+                      <span className="font-semibold text-slate-200 tabular-nums">
+                        {plan.minDeposit === 0n ? 'Không giới hạn' : `${formatUnits6(plan.minDeposit)} USDC`}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-slate-300">
+                      <span className="text-slate-400 flex items-center space-x-1.5">
+                        <Coins className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Gửi tối đa:</span>
+                      </span>
+                      <span className="font-semibold text-slate-200 tabular-nums">
+                        {plan.maxDeposit === 0n ? 'Không giới hạn' : `${formatUnits6(plan.maxDeposit)} USDC`}
+                      </span>
+                    </div>
+
+                    <div className="flex justify-between items-center text-slate-300">
+                      <span className="text-slate-400 flex items-center space-x-1.5">
+                        <Calendar className="w-3.5 h-3.5 text-slate-500" />
+                        <span>Thời gian ân hạn:</span>
+                      </span>
+                      <span className="font-semibold text-slate-300">3 Ngày</span>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Action CTA */}
+                <div className="pt-6">
+                  <Button
+                    variant={isEnabled ? 'primary' : 'secondary'}
+                    size="md"
+                    disabled={!isEnabled}
+                    disabledReason={!isEnabled ? 'Gói tiết kiệm này hiện đang tạm dừng tiếp nhận' : undefined}
+                    onClick={() => onSelectPlan && onSelectPlan(plan)}
+                    className="w-full"
+                    icon={<TrendingUp className="w-4 h-4" />}
+                  >
+                    {isEnabled ? 'Gửi Tiết Kiệm' : 'Đã Tạm Dừng'}
+                  </Button>
+                </div>
+              </Card>
+            );
+          })}
         </div>
       )}
     </div>

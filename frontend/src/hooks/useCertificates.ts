@@ -12,14 +12,16 @@ export function useCertificates(
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchCertificates = useCallback(async () => {
+  const fetchCertificates = useCallback(async (isBackground: boolean = false) => {
     if (!savingCore || !account || account === ethers.ZeroAddress) {
       setCertificates([]);
       setUnpaidMap({});
       return;
     }
 
-    setIsLoading(true);
+    if (!isBackground) {
+      setIsLoading(true);
+    }
     setError(null);
 
     try {

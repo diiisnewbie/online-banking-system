@@ -1,7 +1,10 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { ethers } from 'ethers';
-import { Coins, Loader2 } from 'lucide-react';
+import { Coins } from 'lucide-react';
 import { formatUnits6 } from '../utils/formatters';
+import { Button } from './ui/Button';
+import { Card } from './ui/Card';
+import { useToast } from './ui/ToastContext';
 
 interface FaucetProps {
   account: string | null;
@@ -11,9 +14,9 @@ interface FaucetProps {
 }
 
 export const Faucet: React.FC<FaucetProps> = ({ account, usdcContract, balance, onMintSuccess }) => {
+  const { addToast } = useToast();
   const [localBalance, setLocalBalance] = useState<bigint | null>(null);
   const [isMinting, setIsMinting] = useState(false);
-  const [msg, setMsg] = useState<string | null>(null);
 
   const fetchBalance = useCallback(async () => {
     if (!account || !usdcContract) return;
@@ -36,11 +39,17 @@ export const Faucet: React.FC<FaucetProps> = ({ account, usdcContract, balance, 
   const handleMint = async () => {
     if (!account || !usdcContract) return;
     setIsMinting(true);
-    setMsg(null);
     try {
       const tx = await usdcContract.mint(account, 1_000_000_000n); // 1,000 USDC
-      await tx.wait();
-      setMsg('Đã nhận thành công 1,000 USDC!');
+      const receipt = await tx.wait();
+      addToast(
+        'success',
+        'Đã nhận 1,000 USDC Test vào ví thành công!',
+        {
+          title: 'Faucet Thành Công',
+          txHash: receipt?.hash || tx.hash,
+        }
+      );
       if (onMintSuccess) {
         await onMintSuccess();
       } else {
@@ -48,7 +57,9 @@ export const Faucet: React.FC<FaucetProps> = ({ account, usdcContract, balance, 
       }
     } catch (err: any) {
       console.error('Faucet mint failed:', err);
-      setMsg('Lỗi khi mint USDC test: ' + (err?.reason || err?.message));
+      addToast('error', 'Lỗi khi mint USDC test: ' + (err?.reason || err?.message), {
+        title: 'Faucet Thất Bại',
+      });
     } finally {
       setIsMinting(false);
     }
@@ -57,39 +68,33 @@ export const Faucet: React.FC<FaucetProps> = ({ account, usdcContract, balance, 
   if (!account) return null;
 
   return (
-    <div className="bg-slate-800/60 border border-slate-700/80 rounded-xl p-4 flex flex-col sm:flex-row items-center justify-between gap-3">
-      <div className="flex items-center space-x-3">
-        <div className="p-2.5 bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 rounded-lg">
+    <Card className="p-4 flex flex-col sm:flex-row items-center justify-between gap-4 bg-slate-900/60 border-slate-800/80">
+      <div className="flex items-center space-x-3.5">
+        <div className="p-2.5 bg-emerald-950/60 text-emerald-400 border border-emerald-800/40 rounded-xl shrink-0">
           <Coins className="w-5 h-5" />
         </div>
         <div>
-          <div className="text-xs text-slate-400">Số dư ví cá nhân (MockUSDC)</div>
-          <div className="text-lg font-bold text-white font-mono">
+          <div className="text-[11px] font-medium text-slate-400">Số dư ví cá nhân (MockUSDC)</div>
+          <div className="text-xl font-black text-white font-mono tabular-nums tracking-tight">
             {effectiveBalance !== null ? `${formatUnits6(effectiveBalance)} USDC` : '--'}
           </div>
         </div>
       </div>
 
-      <div className="flex items-center space-x-3 w-full sm:w-auto">
-        {msg && <span className="text-xs text-emerald-400 font-medium">{msg}</span>}
-        <button
+      <div className="w-full sm:w-auto">
+        <Button
+          variant="emerald"
+          size="md"
+          isLoading={isMinting}
+          loadingText="Đang nhận USDC..."
+          disabled={!usdcContract}
           onClick={handleMint}
-          disabled={isMinting || !usdcContract}
-          className="w-full sm:w-auto px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-lg text-xs font-semibold transition flex items-center justify-center space-x-1.5 shadow-sm shadow-emerald-700/30"
+          className="w-full sm:w-auto"
+          icon={<Coins className="w-4 h-4" />}
         >
-          {isMinting ? (
-            <>
-              <Loader2 className="w-3.5 h-3.5 animate-spin" />
-              <span>Đang nhận...</span>
-            </>
-          ) : (
-            <>
-              <Coins className="w-3.5 h-3.5" />
-              <span>Nhận 1,000 USDC Test</span>
-            </>
-          )}
-        </button>
+          Nhận 1,000 USDC Test
+        </Button>
       </div>
-    </div>
+    </Card>
   );
 };

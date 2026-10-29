@@ -1,5 +1,6 @@
 # Dependencies & Package Managers
 node_modules/
+**/node_modules/
 .pnp
 .pnp.js
 
@@ -11,6 +12,9 @@ docs/progress/
 .env
 .env.*
 !.env.example
+**/.env
+**/.env.*
+!**/.env.example
 *.pem
 *.key
 *.p12
@@ -32,16 +36,22 @@ id_ed25519*
 
 # Build artifacts & Compilers
 artifacts/
+**/artifacts/
 cache/
+**/cache/
 dist/
+**/dist/
 build/
+**/build/
 out/
 typechain-types/
+**/typechain-types/
 types/
 *.tsbuildinfo
 
 # Testing & Coverage
 coverage/
+**/coverage/
 .coverage/
 coverage.json
 *.lcov
@@ -49,6 +59,8 @@ coverage.json
 # Ignition deployments & OpenZeppelin manifests
 ignition/deployments/
 ignition/cache/
+**/ignition/deployments/
+**/ignition/cache/
 .openzeppelin/
 
 # Logs
