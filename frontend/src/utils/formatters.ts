@@ -1,13 +1,27 @@
 /**
- * Format số dư token 6 decimals thành chuỗi định dạng dễ đọc (ví dụ: 1,000.50 USDC)
+ * Format số dư token 6 decimals thành chuỗi định dạng dễ đọc (ví dụ: 1,000.50 USDC hoặc 1,000.000095 USDC)
+ * Tự động mở rộng hiển thị đến 6 chữ số thập phân nếu có số dư vi mô (< 0.01) của token 6 decimals.
  */
-export function formatUnits6(amount: bigint | undefined): string {
+export function formatUnits6(amount: bigint | undefined, minDecimals: number = 2): string {
   if (amount === undefined) return '0.00';
   const isNegative = amount < 0n;
   const abs = isNegative ? -amount : amount;
   const whole = abs / 1_000_000n;
   const fraction = abs % 1_000_000n;
-  const fractionStr = fraction.toString().padStart(6, '0').slice(0, 2);
+
+  let fractionStr = fraction.toString().padStart(6, '0');
+
+  // Nếu có số lẻ vi mô ở các chữ số thập phân thứ 3 đến thứ 6 (ví dụ: 0.000095 USDC):
+  // Giữ đến chữ số có nghĩa cuối cùng để người dùng thấy rõ từng micro-cent lãi suất.
+  if (fraction > 0n && fraction % 10_000n !== 0n) {
+    fractionStr = fractionStr.replace(/0+$/, '');
+    if (fractionStr.length < minDecimals) {
+      fractionStr = fractionStr.padEnd(minDecimals, '0');
+    }
+  } else {
+    fractionStr = fractionStr.slice(0, minDecimals);
+  }
+
   const formattedWhole = Number(whole).toLocaleString('en-US');
   return `${isNegative ? '-' : ''}${formattedWhole}.${fractionStr}`;
 }
