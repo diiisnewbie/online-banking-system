@@ -1,13 +1,14 @@
 import { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { SAVING_CORE_ADDRESS } from '../contracts/addresses';
+import { getSavingCoreAddress } from '../contracts/addresses';
 import SavingCoreAbi from '../contracts/abis/SavingCore.json';
 import VaultManagerAbi from '../contracts/abis/VaultManager.json';
 import MockUSDCAbi from '../contracts/abis/MockUSDC.json';
 
 export function useBankingContracts(
   provider: ethers.BrowserProvider | ethers.JsonRpcProvider | null,
-  signer: ethers.JsonRpcSigner | null
+  signer: ethers.JsonRpcSigner | null,
+  chainId?: number | null
 ) {
   const [vaultAddress, setVaultAddress] = useState<string | null>(null);
   const [usdcAddress, setUsdcAddress] = useState<string | null>(null);
@@ -16,15 +17,17 @@ export function useBankingContracts(
   const [vault, setVault] = useState<ethers.Contract | null>(null);
   const [usdc, setUsdc] = useState<ethers.Contract | null>(null);
 
+  const activeSavingCoreAddress = getSavingCoreAddress(chainId);
+
   useEffect(() => {
-    if (!SAVING_CORE_ADDRESS || SAVING_CORE_ADDRESS === ethers.ZeroAddress) {
+    if (!activeSavingCoreAddress || activeSavingCoreAddress === ethers.ZeroAddress) {
       return;
     }
     const runner = signer || provider;
     if (!runner) return;
 
     try {
-      const coreInstance = new ethers.Contract(SAVING_CORE_ADDRESS, SavingCoreAbi, runner);
+      const coreInstance = new ethers.Contract(activeSavingCoreAddress, SavingCoreAbi, runner);
       setSavingCore(coreInstance);
 
       // Query immutable vault and usdc getters from SavingCore
@@ -50,13 +53,13 @@ export function useBankingContracts(
     } catch (err) {
       console.error('Error creating contract instances:', err);
     }
-  }, [provider, signer]);
+  }, [provider, signer, activeSavingCoreAddress]);
 
   return {
     savingCore,
     vault,
     usdc,
-    savingCoreAddress: SAVING_CORE_ADDRESS,
+    savingCoreAddress: activeSavingCoreAddress,
     vaultAddress,
     usdcAddress,
   };

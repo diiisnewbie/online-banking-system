@@ -53,9 +53,10 @@ export const Navbar: React.FC<NavbarProps> = ({
   onOpenTimeTravel,
   onRefreshAll,
 }) => {
-  const targetChainId = Number(import.meta.env.VITE_CHAIN_ID || 31337);
+  const targetChainId = Number(import.meta.env.VITE_CHAIN_ID || 11155111);
+  const isSupportedChain = chainId === 11155111 || chainId === 31337;
   const isHardhat = chainId === 31337;
-  const isWrongNetwork = account !== null && chainId !== targetChainId;
+  const isWrongNetwork = account !== null && !isSupportedChain;
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [copied, setCopied] = useState(false);
 

@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { ethers } from 'ethers';
 
-const TARGET_CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID || 31337);
+const SUPPORTED_CHAIN_IDS = [11155111, 31337];
+const TARGET_CHAIN_ID = Number(import.meta.env.VITE_CHAIN_ID || 11155111);
 const TARGET_CHAIN_HEX = '0x' + TARGET_CHAIN_ID.toString(16);
-const LOCAL_RPC_URL = import.meta.env.VITE_RPC_URL || 'http://127.0.0.1:8545';
+const LOCAL_RPC_URL = 'http://127.0.0.1:8545';
 
 export function useWeb3() {
   const [account, setAccount] = useState<string | null>(null);
@@ -31,9 +32,13 @@ export function useWeb3() {
         return;
       }
 
-      // Luôn kết nối trực tiếp với node local qua JsonRpcProvider
-      // để tránh cache của MetaMask BrowserProvider
-      const p = new ethers.JsonRpcProvider(LOCAL_RPC_URL);
+      // Luôn kết nối trực tiếp với node local qua JsonRpcProvider nếu ở chain 31337
+      const rpcUrl =
+        chainId === 31337
+          ? 'http://127.0.0.1:8545'
+          : import.meta.env.VITE_RPC_URL || 'https://ethereum-sepolia-rpc.publicnode.com';
+
+      const p = new ethers.JsonRpcProvider(rpcUrl);
       const block = await p.getBlock('latest');
       if (block) {
         const nowSec = Math.floor(Date.now() / 1000);
@@ -43,7 +48,7 @@ export function useWeb3() {
     } catch (err) {
       console.warn('Failed to sync block time:', err);
     }
-  }, []);
+  }, [chainId]);
 
   // Tick simulated time every second
   useEffect(() => {
@@ -100,7 +105,7 @@ export function useWeb3() {
       const currentChainId = Number(network.chainId);
       setChainId(currentChainId);
 
-      if (currentChainId !== TARGET_CHAIN_ID) {
+      if (!SUPPORTED_CHAIN_IDS.includes(currentChainId)) {
         await switchNetwork();
       }
 

@@ -39,7 +39,7 @@ export function App() {
     connectWallet,
   } = useWeb3();
 
-  const { savingCore, vault, usdc, savingCoreAddress } = useBankingContracts(provider, signer);
+  const { savingCore, vault, usdc, savingCoreAddress } = useBankingContracts(provider, signer, chainId);
   const { plans, isLoading: plansLoading, error: plansError, refetchPlans } = usePlans(savingCore);
 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
