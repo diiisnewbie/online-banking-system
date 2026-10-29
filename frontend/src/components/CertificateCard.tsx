@@ -18,6 +18,7 @@ import {
   Layers,
   Sparkles,
   Bot,
+  ArrowRightLeft,
 } from 'lucide-react';
 
 interface CertificateCardProps {
@@ -32,6 +33,7 @@ interface CertificateCardProps {
   onOpenEarlyModal: (cert: DepositCertificate) => void;
   onOpenRenewModal: (cert: DepositCertificate) => void;
   onOpenMaturityModal?: (cert: DepositCertificate) => void;
+  onOpenTransferModal?: (cert: DepositCertificate) => void;
   onSuccess: () => Promise<void>;
 }
 
@@ -46,6 +48,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
   onOpenEarlyModal,
   onOpenRenewModal,
   onOpenMaturityModal,
+  onOpenTransferModal,
   onSuccess,
 }) => {
   const { addToast } = useToast();
@@ -367,15 +370,28 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
               )}
             </div>
           ) : (
-            <Button
-              variant="outline"
-              size="md"
-              onClick={() => onOpenEarlyModal(certificate)}
-              className="w-full text-rose-300 border-rose-800/50 hover:bg-rose-950/40 hover:border-rose-700"
-              icon={<AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
-            >
-              Rút Trước Hạn (Phạt 5%)
-            </Button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <Button
+                variant="outline"
+                size="md"
+                onClick={() => onOpenEarlyModal(certificate)}
+                className="w-full text-rose-300 border-rose-800/50 hover:bg-rose-950/40 hover:border-rose-700"
+                icon={<AlertTriangle className="w-3.5 h-3.5 text-amber-400" />}
+              >
+                Rút Sớm (-5%)
+              </Button>
+              <Button
+                variant="secondary"
+                size="md"
+                onClick={() => {
+                  if (onOpenTransferModal) onOpenTransferModal(certificate);
+                }}
+                className="w-full text-indigo-300 border-indigo-700/60 hover:bg-indigo-950/40"
+                icon={<ArrowRightLeft className="w-3.5 h-3.5 text-indigo-400" />}
+              >
+                Chuyển Nhượng
+              </Button>
+            </div>
           )}
         </div>
       )}

@@ -19,6 +19,7 @@ interface CertificatesListProps {
   onOpenEarlyModal: (cert: DepositCertificate) => void;
   onOpenRenewModal: (cert: DepositCertificate) => void;
   onOpenMaturityModal?: (cert: DepositCertificate) => void;
+  onOpenTransferModal?: (cert: DepositCertificate) => void;
   onSuccess: () => Promise<void>;
   onOpenDepositModal: () => void;
   onOpenTimeTravel?: () => void;
@@ -38,6 +39,7 @@ export const CertificatesList: React.FC<CertificatesListProps> = ({
   onOpenEarlyModal,
   onOpenRenewModal,
   onOpenMaturityModal,
+  onOpenTransferModal,
   onSuccess,
   onOpenDepositModal,
   onOpenTimeTravel,
@@ -182,6 +184,7 @@ export const CertificatesList: React.FC<CertificatesListProps> = ({
                 onOpenEarlyModal={onOpenEarlyModal}
                 onOpenRenewModal={onOpenRenewModal}
                 onOpenMaturityModal={onOpenMaturityModal}
+                onOpenTransferModal={onOpenTransferModal}
                 onSuccess={onSuccess}
               />
             ))}

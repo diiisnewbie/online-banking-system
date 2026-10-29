@@ -13,6 +13,7 @@ import { OpenDepositModal } from './components/OpenDepositModal';
 import { EarlyWithdrawModal } from './components/EarlyWithdrawModal';
 import { MaturityWithdrawModal } from './components/MaturityWithdrawModal';
 import { RenewModal } from './components/RenewModal';
+import { TransferModal } from './components/TransferModal';
 import { DevTimeTravelModal } from './components/DevTimeTravelModal';
 import { SavingPlan, DepositCertificate, DepositStatus } from './contracts/types';
 import { useToast } from './components/ui/ToastContext';
@@ -101,6 +102,7 @@ export function App() {
   const [selectedCertForEarly, setSelectedCertForEarly] = useState<DepositCertificate | null>(null);
   const [selectedCertForMaturity, setSelectedCertForMaturity] = useState<DepositCertificate | null>(null);
   const [selectedCertForRenew, setSelectedCertForRenew] = useState<DepositCertificate | null>(null);
+  const [selectedCertForTransfer, setSelectedCertForTransfer] = useState<DepositCertificate | null>(null);
 
   // User personal USDC balance state
   const [userBalance, setUserBalance] = useState<bigint | null>(null);
@@ -315,6 +317,7 @@ export function App() {
                 onOpenEarlyModal={(cert) => setSelectedCertForEarly(cert)}
                 onOpenMaturityModal={(cert) => setSelectedCertForMaturity(cert)}
                 onOpenRenewModal={(cert) => setSelectedCertForRenew(cert)}
+                onOpenTransferModal={(cert) => setSelectedCertForTransfer(cert)}
                 onSuccess={handleTxSuccess}
                 onOpenDepositModal={() => {
                   setSelectedPlanForOpen(undefined);
@@ -427,6 +430,15 @@ export function App() {
           usdc={usdc}
           currentSimulatedTime={currentSimulatedTime}
           timeUnit={timeUnit}
+          onSuccess={handleTxSuccess}
+        />
+
+        <TransferModal
+          isOpen={selectedCertForTransfer !== null}
+          onClose={() => setSelectedCertForTransfer(null)}
+          certificate={selectedCertForTransfer}
+          savingCore={savingCore}
+          account={account}
           onSuccess={handleTxSuccess}
         />
 
