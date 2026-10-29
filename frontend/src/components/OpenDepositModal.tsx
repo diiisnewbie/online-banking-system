@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { SavingPlan } from '../contracts/types';
-import { formatUnits6, formatBps, formatTimestamp } from '../utils/formatters';
+import { formatUnits6, formatBps, formatTimestamp, formatTenorUnit } from '../utils/formatters';
 import { calculatePreviewInterest } from '../utils/interest';
 import { parseContractError } from '../utils/errors';
 import { useToast } from './ui/ToastContext';
@@ -25,6 +25,7 @@ interface OpenDepositModalProps {
   usdc: ethers.Contract | null;
   account: string | null;
   currentSimulatedTime?: bigint;
+  timeUnit?: bigint;
   onSuccess: () => Promise<void>;
 }
 
@@ -37,6 +38,7 @@ export const OpenDepositModal: React.FC<OpenDepositModalProps> = ({
   usdc,
   account,
   currentSimulatedTime,
+  timeUnit,
   onSuccess,
 }) => {
   const { addToast } = useToast();
@@ -95,7 +97,8 @@ export const OpenDepositModal: React.FC<OpenDepositModalProps> = ({
   }
 
   // Tính lãi dự kiến và ngày đáo hạn
-  const tenorSeconds = currentPlan ? currentPlan.tenorDays * 86400n : 0n;
+  const unit = timeUnit || 86400n;
+  const tenorSeconds = currentPlan ? currentPlan.tenorDays * unit : 0n;
   const previewInterest = currentPlan
     ? calculatePreviewInterest(parsedAmount, currentPlan.aprBps, tenorSeconds)
     : 0n;
@@ -274,7 +277,7 @@ export const OpenDepositModal: React.FC<OpenDepositModalProps> = ({
                     {isSelected && <Sparkles className="w-3 h-3 text-indigo-400" />}
                   </div>
                   <div className="text-white text-base font-extrabold tabular-nums">
-                    {p.tenorDays.toString()} Ngày
+                    {formatTenorUnit(p.tenorDays, unit)}
                   </div>
                   <div className="text-xs font-bold text-emerald-400 tabular-nums mt-0.5">
                     {formatBps(p.aprBps)}/năm

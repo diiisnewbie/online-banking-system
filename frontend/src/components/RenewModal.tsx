@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
 import { DepositCertificate, SavingPlan } from '../contracts/types';
-import { formatUnits6, formatBps, formatTimestamp } from '../utils/formatters';
+import { formatUnits6, formatBps, formatTimestamp, formatTenorUnit } from '../utils/formatters';
 import { calculatePreviewInterest } from '../utils/interest';
 import { parseContractError } from '../utils/errors';
 import { Modal } from './ui/Modal';
@@ -18,6 +18,7 @@ interface RenewModalProps {
   vault: ethers.Contract | null;
   usdc: ethers.Contract | null;
   currentSimulatedTime?: bigint;
+  timeUnit?: bigint;
   onSuccess: () => Promise<void>;
 }
 
@@ -32,6 +33,7 @@ export const RenewModal: React.FC<RenewModalProps> = ({
   vault,
   usdc,
   currentSimulatedTime,
+  timeUnit,
   onSuccess,
 }) => {
   const { addToast } = useToast();
@@ -80,8 +82,9 @@ export const RenewModal: React.FC<RenewModalProps> = ({
   const targetPlan = plans.find((p) => p.planId === selectedPlanId) || plans[0];
 
   // Ngày đáo hạn mới ước tính
+  const unit = timeUnit || 86400n;
   const nowSec = currentSimulatedTime || BigInt(Math.floor(Date.now() / 1000));
-  const newTenorSeconds = targetPlan ? targetPlan.tenorDays * 86400n : 0n;
+  const newTenorSeconds = targetPlan ? targetPlan.tenorDays * unit : 0n;
   const newMaturityAt = nowSec + newTenorSeconds;
 
   // Kiểm tra thanh khoản Vault
@@ -229,7 +232,9 @@ export const RenewModal: React.FC<RenewModalProps> = ({
                   }`}
                 >
                   <div className="text-[11px] font-mono text-slate-400">Gói #{p.planId.toString()}</div>
-                  <div className="text-indigo-400 text-sm font-black tabular-nums">{p.tenorDays.toString()} Ngày</div>
+                  <div className="text-indigo-400 text-sm font-black tabular-nums">
+                    {formatTenorUnit(p.tenorDays, unit)}
+                  </div>
                   <div className="text-[11px] text-emerald-400 font-bold tabular-nums">{formatBps(p.aprBps)}/năm</div>
                 </button>
               );

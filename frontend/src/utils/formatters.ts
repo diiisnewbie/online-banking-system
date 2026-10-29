@@ -38,6 +38,13 @@ export function formatTimestamp(timestamp: bigint | undefined): string {
   });
 }
 
+export function formatTenorUnit(tenorVal: bigint, timeUnit: bigint = 86400n): string {
+  if (timeUnit <= 60n) {
+    return `${tenorVal.toString()} Phút`;
+  }
+  return `${tenorVal.toString()} Ngày`;
+}
+
 /**
  * Tính toán và format thời gian đếm ngược còn lại
  * @param maturityAt Mốc thời gian đáo hạn (giây)

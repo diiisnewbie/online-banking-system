@@ -25,7 +25,8 @@ describe("Phase 3 -- Frontend Views & Owner Enumeration", function () {
       BigInt(VARIANT.defaultAprBps),
       BigInt(VARIANT.earlyPenaltyBps),
       PLAN0_MIN_DEPOSIT,
-      PLAN0_MAX_DEPOSIT
+      PLAN0_MAX_DEPOSIT,
+      0n
     );
 
     await vault.setSavingCore(core.target);

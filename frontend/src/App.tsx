@@ -40,7 +40,7 @@ export function App() {
   } = useWeb3();
 
   const { savingCore, vault, usdc, savingCoreAddress } = useBankingContracts(provider, signer, chainId);
-  const { plans, isLoading: plansLoading, error: plansError, refetchPlans } = usePlans(savingCore);
+  const { plans, timeUnit, isLoading: plansLoading, error: plansError, refetchPlans } = usePlans(savingCore);
 
   const [refreshTrigger, setRefreshTrigger] = useState(0);
   const {
@@ -290,6 +290,7 @@ export function App() {
             {activeTab === 'plans' && (
               <PlansList
                 plans={plans}
+                timeUnit={timeUnit}
                 isLoading={plansLoading}
                 error={plansError}
                 onSelectPlan={(plan) => {
@@ -390,6 +391,7 @@ export function App() {
           usdc={usdc}
           account={account}
           currentSimulatedTime={currentSimulatedTime}
+          timeUnit={timeUnit}
           onSuccess={handleTxSuccess}
         />
 
@@ -421,6 +423,7 @@ export function App() {
           vault={vault}
           usdc={usdc}
           currentSimulatedTime={currentSimulatedTime}
+          timeUnit={timeUnit}
           onSuccess={handleTxSuccess}
         />
 

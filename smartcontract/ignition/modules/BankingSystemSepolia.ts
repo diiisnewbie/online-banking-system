@@ -1,12 +1,10 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
 // Tham số tối ưu cho môi trường Live Testnet (Sepolia)
-// Cho phép demo chu kỳ đầy đủ (Mở sổ -> Đáo hạn -> Hết Grace -> Auto-Renew) trong vòng 5-10 phút thực tế.
+// Kỳ hạn 1 phút, Grace Period 1 phút (sau 1 phút nữa Auto-Renew kích hoạt)
 const SEPOLIA_FUND_AMOUNT = 100_000_000_000n; // 100,000 USDC cho Vault
-const SEPOLIA_USER_MINT = 20_000_000_000n;    // 20,000 USDC cho deployer
-
-// Grace period trên Sepolia: 2 phút (120 giây) để bot kịp trigger demo
-const SEPOLIA_GRACE_PERIOD_SECONDS = 120n;
+const SEPOLIA_GRACE_PERIOD_SECONDS = 60n;     // 1 phút ân hạn (60 giây)
+const SEPOLIA_TIME_UNIT_SECONDS = 60n;         // 1 đơn vị kỳ hạn = 60 giây (1 phút)
 
 export default buildModule("BankingSystemSepolia", (m) => {
   const deployer = m.getAccount(0);
@@ -15,20 +13,18 @@ export default buildModule("BankingSystemSepolia", (m) => {
   const usdc = m.contract("MockUSDC");
   const vault = m.contract("VaultManager", [usdc, deployer]);
 
-  // Plan 0: Gói kiểm thử siêu tốc (5 phút - 300 giây)
-  // Lưu ý: SavingCore nhận defaultTenorDays dạng ngày (uint256 tenorDays)
-  // Để hỗ trợ gói theo ngày chuẩn:
-  // Plan 0: 1 ngày (86,400s)
+  // Plan 0: Kỳ hạn 1 phút (1 * 60s = 60s)
   const core = m.contract("SavingCore", [
     usdc,
     vault,
     deployer,
-    SEPOLIA_GRACE_PERIOD_SECONDS, // 120s grace period
-    1n,                           // Plan 0: 1 ngày
+    SEPOLIA_GRACE_PERIOD_SECONDS, // 60s grace period (1 phút)
+    1n,                           // Plan 0: 1 phút
     500n,                         // 5.00% APR
     500n,                         // 5.00% phạt rút sớm
     10_000_000n,                  // Min: 10 USDC
     10_000_000_000n,              // Max: 10,000 USDC
+    SEPOLIA_TIME_UNIT_SECONDS,    // TimeUnit = 60s (1 phút)
   ]);
 
   // 2. Wire SavingCore to VaultManager
@@ -45,21 +41,20 @@ export default buildModule("BankingSystemSepolia", (m) => {
     after: [approveVault, wire],
   });
 
-  // 4. Seed Thêm Plan 1 (Kỳ hạn 7 ngày) & Plan 2 (Kỳ hạn 30 ngày)
+  // 4. Seed Thêm Plan 1 (Kỳ hạn 3 phút) & Plan 2 (Kỳ hạn 5 phút)
   const plan1 = m.call(
     core,
     "createPlan",
-    [7n, 700n, 10_000_000n, 50_000_000_000n, 500n],
-    { id: "createPlan7Days", after: [wire] }
+    [3n, 700n, 10_000_000n, 50_000_000_000n, 500n], // 3 phút, 7% APR
+    { id: "createPlan3Minutes", after: [wire] }
   );
 
   const plan2 = m.call(
     core,
     "createPlan",
-    [30n, 1000n, 10_000_000n, 50_000_000_000n, 500n],
-    { id: "createPlan30Days", after: [plan1] }
+    [5n, 1000n, 10_000_000n, 50_000_000_000n, 500n], // 5 phút, 10% APR
+    { id: "createPlan5Minutes", after: [plan1] }
   );
 
   return { usdc, vault, core };
 });
-

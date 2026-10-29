@@ -11,6 +11,7 @@ interface PlansListProps {
   plans: SavingPlan[];
   isLoading: boolean;
   error: string | null;
+  timeUnit?: bigint;
   onSelectPlan?: (plan: SavingPlan) => void;
 }
 
@@ -18,6 +19,7 @@ export const PlansList: React.FC<PlansListProps> = ({
   plans,
   isLoading,
   error,
+  timeUnit,
   onSelectPlan,
 }) => {
   return (
@@ -99,7 +101,9 @@ export const PlansList: React.FC<PlansListProps> = ({
                       <span className="text-3xl font-black text-white tracking-tight tabular-nums">
                         {plan.tenorDays.toString()}
                       </span>
-                      <span className="text-sm font-bold text-slate-400">Ngày</span>
+                      <span className="text-sm font-bold text-slate-400">
+                        {timeUnit && timeUnit <= 60n ? 'Phút' : 'Ngày'}
+                      </span>
                     </div>
                     <div className="text-[11px] text-slate-500 font-medium">Kỳ hạn gửi cố định</div>
                   </div>

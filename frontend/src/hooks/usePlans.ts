@@ -4,6 +4,7 @@ import { SavingPlan } from '../contracts/types';
 
 export function usePlans(savingCore: ethers.Contract | null) {
   const [plans, setPlans] = useState<SavingPlan[]>([]);
+  const [timeUnit, setTimeUnit] = useState<bigint>(86400n);
   const [isLoading, setIsLoading] = useState<boolean>(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -12,7 +13,13 @@ export function usePlans(savingCore: ethers.Contract | null) {
     setIsLoading(true);
     setError(null);
     try {
-      const rawPlans = await savingCore.getAllPlans();
+      const [rawPlans, tu] = await Promise.all([
+        savingCore.getAllPlans(),
+        savingCore.timeUnit().catch(() => 86400n),
+      ]);
+      if (tu) {
+        setTimeUnit(BigInt(tu));
+      }
       const parsedPlans: SavingPlan[] = rawPlans.map((p: any) => ({
         planId: BigInt(p.planId),
         tenorDays: BigInt(p.tenorDays),
@@ -35,5 +42,5 @@ export function usePlans(savingCore: ethers.Contract | null) {
     fetchPlans();
   }, [fetchPlans]);
 
-  return { plans, isLoading, error, refetchPlans: fetchPlans };
+  return { plans, timeUnit, isLoading, error, refetchPlans: fetchPlans };
 }

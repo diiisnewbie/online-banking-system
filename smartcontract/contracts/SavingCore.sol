@@ -99,6 +99,7 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
     IERC20 public immutable usdc;
     IVaultManager public immutable vault;
     uint256 public immutable gracePeriod;
+    uint256 public immutable timeUnit;
     uint256 public planCount;
     uint256 public nextDepositId = 1;
 
@@ -122,12 +123,14 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
         uint256 plan0AprBps,
         uint256 plan0PenaltyBps,
         uint256 plan0Min,
-        uint256 plan0Max
+        uint256 plan0Max,
+        uint256 timeUnit_
     ) ERC721("Term Deposit Certificate", "TDC") Ownable(initialOwner) {
         if (address(usdc_) == address(0) || address(vault_) == address(0)) revert ZeroAddress();
         usdc = usdc_;
         vault = vault_;
         gracePeriod = gracePeriod_;
+        timeUnit = timeUnit_ == 0 ? 1 days : timeUnit_;
 
         _createPlan(plan0TenorDays, plan0AprBps, plan0Min, plan0Max, plan0PenaltyBps);
     }
@@ -196,7 +199,7 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
         if (plan.maxDeposit > 0 && amount > plan.maxDeposit) revert InvalidDepositAmount();
 
         depositId = nextDepositId++;
-        uint256 maturityAt = block.timestamp + plan.tenorDays * 1 days;
+        uint256 maturityAt = block.timestamp + plan.tenorDays * timeUnit;
 
         certificates[depositId] = DepositCertificate({
             depositId: depositId,
@@ -209,7 +212,7 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
             status: DepositStatus.Active
         });
 
-        uint256 interest = _calcInterest(amount, plan.aprBps, plan.tenorDays * 1 days);
+        uint256 interest = _calcInterest(amount, plan.aprBps, plan.tenorDays * timeUnit);
         totalCommittedInterest += interest;
 
         emit DepositOpened(depositId, msg.sender, planId, amount, maturityAt, plan.aprBps);
@@ -297,7 +300,7 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
         oldCert.status = DepositStatus.ManualRenewed;
 
         newDepositId = nextDepositId++;
-        uint256 newMaturityAt = block.timestamp + newPlan.tenorDays * 1 days;
+        uint256 newMaturityAt = block.timestamp + newPlan.tenorDays * timeUnit;
 
         certificates[newDepositId] = DepositCertificate({
             depositId: newDepositId,
@@ -310,7 +313,7 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
             status: DepositStatus.Active
         });
 
-        uint256 newInterest = _calcInterest(newPrincipal, newPlan.aprBps, newPlan.tenorDays * 1 days);
+        uint256 newInterest = _calcInterest(newPrincipal, newPlan.aprBps, newPlan.tenorDays * timeUnit);
         totalCommittedInterest = totalCommittedInterest - oldInterest + newInterest;
 
         emit Renewed(oldDepositId, newDepositId, newPrincipal, newPlanId);

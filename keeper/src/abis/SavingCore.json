@@ -45,6 +45,11 @@
         "internalType": "uint256",
         "name": "plan0Max",
         "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "timeUnit_",
+        "type": "uint256"
       }
     ],
     "stateMutability": "nonpayable",
@@ -1412,6 +1417,19 @@
         "internalType": "string",
         "name": "",
         "type": "string"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [],
+    "name": "timeUnit",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
       }
     ],
     "stateMutability": "view",

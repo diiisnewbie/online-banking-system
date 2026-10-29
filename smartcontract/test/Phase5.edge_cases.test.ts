@@ -25,7 +25,8 @@ describe("Phase 5 -- Edge Cases & Boundary Error Coverage Suite", function () {
       BigInt(VARIANT.defaultAprBps),
       BigInt(VARIANT.earlyPenaltyBps),
       PLAN0_MIN_DEPOSIT,
-      PLAN0_MAX_DEPOSIT
+      PLAN0_MAX_DEPOSIT,
+      0n
     );
 
     await vault.setSavingCore(core.target);
@@ -62,7 +63,8 @@ describe("Phase 5 -- Edge Cases & Boundary Error Coverage Suite", function () {
         BigInt(VARIANT.defaultAprBps),
         BigInt(VARIANT.earlyPenaltyBps),
         PLAN0_MIN_DEPOSIT,
-        PLAN0_MAX_DEPOSIT
+        PLAN0_MAX_DEPOSIT,
+        0n
       )
     ).to.be.revertedWithCustomError(SavingCore, "ZeroAddress");
 
@@ -77,7 +79,8 @@ describe("Phase 5 -- Edge Cases & Boundary Error Coverage Suite", function () {
         BigInt(VARIANT.defaultAprBps),
         BigInt(VARIANT.earlyPenaltyBps),
         PLAN0_MIN_DEPOSIT,
-        PLAN0_MAX_DEPOSIT
+        PLAN0_MAX_DEPOSIT,
+        0n
       )
     ).to.be.revertedWithCustomError(SavingCore, "ZeroAddress");
   });

@@ -22,6 +22,7 @@ export default buildModule("BankingSystem", (m) => {
     BigInt(VARIANT.earlyPenaltyBps),
     PLAN0_MIN_DEPOSIT,
     PLAN0_MAX_DEPOSIT,
+    0n,
   ]);
 
   // 2. Wire SavingCore to VaultManager

@@ -25,7 +25,8 @@ describe("Phase 4 -- Bonuses C2 & C1 Test Suite (19 Scenarios)", function () {
       BigInt(VARIANT.defaultAprBps),
       BigInt(VARIANT.earlyPenaltyBps),
       PLAN0_MIN_DEPOSIT,
-      PLAN0_MAX_DEPOSIT
+      PLAN0_MAX_DEPOSIT,
+      0n
     );
 
     await vault.setSavingCore(core.target);

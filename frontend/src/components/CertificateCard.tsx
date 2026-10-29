@@ -75,7 +75,11 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
 
   // Tên gói tương ứng
   const planInfo = plans.find((p) => p.planId === planId);
-  const planName = planInfo ? `Gói ${planInfo.tenorDays.toString()} Ngày` : `Gói #${planId.toString()}`;
+  const planName = planInfo
+    ? tenorSeconds <= 600n
+      ? `Gói ${planInfo.tenorDays.toString()} Phút`
+      : `Gói ${planInfo.tenorDays.toString()} Ngày`
+    : `Gói #${planId.toString()}`;
 
   // Claim pending interest (C1)
   const handleClaimPending = async () => {
