@@ -1,3 +1,7 @@
+try {
+  process.loadEnvFile();
+} catch {}
+
 import hardhatToolboxMochaEthersPlugin from "@nomicfoundation/hardhat-toolbox-mocha-ethers";
 import hardhatUpgradesPlugin from "@openzeppelin/hardhat-upgrades";
 import { configVariable, defineConfig } from "hardhat/config";
@@ -50,8 +54,10 @@ export default defineConfig({
         default: "https://ethereum-sepolia-rpc.publicnode.com",
       }),
       accounts: [
-        configVariable("SEPOLIA_DEPLOYER_PRIVATE_KEY"),
-        configVariable("SEPOLIA_REGISTERER_PRIVATE_KEY"),
+        process.env.SEPOLIA_DEPLOYER_PRIVATE_KEY || configVariable("SEPOLIA_DEPLOYER_PRIVATE_KEY"),
+        process.env.SEPOLIA_REGISTERER_PRIVATE_KEY ||
+          process.env.SEPOLIA_DEPLOYER_PRIVATE_KEY ||
+          configVariable("SEPOLIA_REGISTERER_PRIVATE_KEY"),
       ],
     },
     ethereum: {
