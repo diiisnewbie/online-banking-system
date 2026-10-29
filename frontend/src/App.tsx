@@ -332,8 +332,11 @@ export function App() {
                 vault={vault}
                 usdc={usdc}
                 account={account}
+                plans={plans}
+                timeUnit={timeUnit}
                 refreshTrigger={refreshTrigger}
                 onSuccess={handleTxSuccess}
+                onRefetchPlans={refetchPlans}
               />
             )}
 

@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { formatUnits6 } from '../utils/formatters';
+import { SavingPlan } from '../contracts/types';
+import { formatUnits6, formatBps, formatTenorUnit } from '../utils/formatters';
 import { parseContractError } from '../utils/errors';
 import { useToast } from './ui/ToastContext';
 import { Card } from './ui/Card';
@@ -19,15 +20,24 @@ import {
   CheckCircle2,
   Wallet,
   Activity,
+  Layers,
+  Ban,
+  Power,
+  Plus,
+  Edit3,
 } from 'lucide-react';
+import { Modal } from './ui/Modal';
 
 interface AdminPanelProps {
   savingCore: ethers.Contract | null;
   vault: ethers.Contract | null;
   usdc: ethers.Contract | null;
   account: string | null;
+  plans?: SavingPlan[];
+  timeUnit?: bigint;
   refreshTrigger?: number;
   onSuccess: () => Promise<void>;
+  onRefetchPlans?: () => Promise<void>;
 }
 
 export const AdminPanel: React.FC<AdminPanelProps> = ({
@@ -35,8 +45,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   vault,
   usdc,
   account,
+  plans,
+  timeUnit,
   refreshTrigger,
   onSuccess,
+  onRefetchPlans,
 }) => {
   const { addToast } = useToast();
   const [coreOwner, setCoreOwner] = useState<string | null>(null);
@@ -56,6 +69,21 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isWithdrawing, setIsWithdrawing] = useState<boolean>(false);
   const [isPausing, setIsPausing] = useState<boolean>(false);
   const [isSettingFee, setIsSettingFee] = useState<boolean>(false);
+  const [togglingPlanId, setTogglingPlanId] = useState<bigint | null>(null);
+
+  // States for Plan Management
+  const [isUpdateAprModalOpen, setIsUpdateAprModalOpen] = useState<boolean>(false);
+  const [selectedPlanForEdit, setSelectedPlanForEdit] = useState<SavingPlan | null>(null);
+  const [newAprInput, setNewAprInput] = useState<string>('');
+  const [isSubmittingApr, setIsSubmittingApr] = useState<boolean>(false);
+
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
+  const [createTenor, setCreateTenor] = useState<string>('10');
+  const [createApr, setCreateApr] = useState<string>('8.0');
+  const [createPenalty, setCreatePenalty] = useState<string>('2.0');
+  const [createMinDeposit, setCreateMinDeposit] = useState<string>('10');
+  const [createMaxDeposit, setCreateMaxDeposit] = useState<string>('10000');
+  const [isSubmittingCreate, setIsSubmittingCreate] = useState<boolean>(false);
 
   const loadAdminData = async () => {
     if (!savingCore || !vault || !usdc) return;
@@ -235,6 +263,145 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       addToast('error', errText, { title: 'Cập Nhật Thất Bại' });
     } finally {
       setIsSettingFee(false);
+    }
+  };
+
+  // 5. Bật / Vô hiệu hóa gói tiết kiệm (enablePlan / disablePlan)
+  const handleTogglePlan = async (planId: bigint, currentlyEnabled: boolean) => {
+    if (!savingCore) return;
+    setTogglingPlanId(planId);
+    try {
+      const tx = currentlyEnabled
+        ? await savingCore.disablePlan(planId)
+        : await savingCore.enablePlan(planId);
+      const receipt = await tx.wait();
+      addToast(
+        'success',
+        `Đã ${currentlyEnabled ? 'vô hiệu hóa' : 'kích hoạt lại'} Gói #${planId.toString()} thành công!`,
+        {
+          title: 'Quản Lý Gói Tiết Kiệm',
+          txHash: receipt?.hash || tx.hash,
+        }
+      );
+      if (onRefetchPlans) await onRefetchPlans();
+      await loadAdminData();
+      await onSuccess();
+    } catch (err: any) {
+      console.error('Toggle plan failed:', err);
+      const errText = parseContractError(err, { core: savingCore, vault });
+      addToast('error', errText, { title: 'Thao Tác Thất Bại' });
+    } finally {
+      setTogglingPlanId(null);
+    }
+  };
+
+  // Mở modal sửa APR
+  const handleOpenEditApr = (plan: SavingPlan) => {
+    setSelectedPlanForEdit(plan);
+    const currentPercent = (Number(plan.aprBps) / 100).toString();
+    setNewAprInput(currentPercent);
+    setIsUpdateAprModalOpen(true);
+  };
+
+  // 6. Cập nhật APR gói (updatePlan)
+  const handleUpdateApr = async () => {
+    if (!savingCore || !selectedPlanForEdit) return;
+    const aprNum = parseFloat(newAprInput);
+    if (isNaN(aprNum) || aprNum <= 0 || aprNum > 100) {
+      addToast('error', 'Lãi suất APR phải lớn hơn 0% và không vượt quá 100% (10,000 BPS).', {
+        title: 'APR Không Hợp Lệ',
+      });
+      return;
+    }
+
+    setIsSubmittingApr(true);
+    try {
+      const newAprBps = BigInt(Math.round(aprNum * 100));
+      const tx = await savingCore.updatePlan(selectedPlanForEdit.planId, newAprBps);
+      const receipt = await tx.wait();
+      addToast(
+        'success',
+        `Cập nhật thành công APR Gói #${selectedPlanForEdit.planId.toString()} thành ${aprNum}%!`,
+        {
+          title: 'Cập Nhật APR Thành Công',
+          txHash: receipt?.hash || tx.hash,
+        }
+      );
+      setIsUpdateAprModalOpen(false);
+      setSelectedPlanForEdit(null);
+      if (onRefetchPlans) await onRefetchPlans();
+      await onSuccess();
+    } catch (err: any) {
+      console.error('Update plan APR failed:', err);
+      const errText = parseContractError(err, { core: savingCore, vault });
+      addToast('error', errText, { title: 'Cập Nhật APR Thất Bại' });
+    } finally {
+      setIsSubmittingApr(false);
+    }
+  };
+
+  // 7. Tạo gói tiết kiệm mới (createPlan)
+  const handleCreatePlan = async () => {
+    if (!savingCore) return;
+    const tenorNum = parseInt(createTenor, 10);
+    const aprNum = parseFloat(createApr);
+    const penaltyNum = parseFloat(createPenalty);
+    const minNum = parseFloat(createMinDeposit);
+    const maxNum = createMaxDeposit ? parseFloat(createMaxDeposit) : 0;
+
+    if (isNaN(tenorNum) || tenorNum < 1 || tenorNum > 3650) {
+      addToast('error', 'Kỳ hạn phải từ 1 đến 3650 đơn vị.', { title: 'Kỳ Hạn Không Hợp Lệ' });
+      return;
+    }
+    if (isNaN(aprNum) || aprNum <= 0 || aprNum > 100) {
+      addToast('error', 'APR phải từ 0.01% đến 100.00%.', { title: 'APR Không Hợp Lệ' });
+      return;
+    }
+    if (isNaN(penaltyNum) || penaltyNum < 0 || penaltyNum > 100) {
+      addToast('error', 'Tỷ lệ phạt rút sớm phải từ 0% đến 100%.', { title: 'Phạt Rút Sớm Không Hợp Lệ' });
+      return;
+    }
+    if (isNaN(minNum) || minNum < 0) {
+      addToast('error', 'Số tiền gửi tối thiểu không hợp lệ.', { title: 'Hạn Mức Không Hợp Lệ' });
+      return;
+    }
+    if (maxNum > 0 && maxNum < minNum) {
+      addToast('error', 'Hạn mức tối đa phải lớn hơn hoặc bằng tối thiểu.', { title: 'Hạn Mức Không Hợp Lệ' });
+      return;
+    }
+
+    setIsSubmittingCreate(true);
+    try {
+      const tenorBn = BigInt(tenorNum);
+      const aprBpsBn = BigInt(Math.round(aprNum * 100));
+      const penaltyBpsBn = BigInt(Math.round(penaltyNum * 100));
+      const minDepositBn = ethers.parseUnits(minNum.toString(), 6);
+      const maxDepositBn = maxNum > 0 ? ethers.parseUnits(maxNum.toString(), 6) : 0n;
+
+      const tx = await savingCore.createPlan(tenorBn, aprBpsBn, minDepositBn, maxDepositBn, penaltyBpsBn);
+      const receipt = await tx.wait();
+      addToast(
+        'success',
+        `Tạo mới gói kỳ hạn ${tenorNum} (${timeUnit && timeUnit <= 60n ? 'phút' : 'ngày'}), APR ${aprNum}% thành công!`,
+        {
+          title: 'Tạo Gói Mới Thành Công',
+          txHash: receipt?.hash || tx.hash,
+        }
+      );
+      setIsCreateModalOpen(false);
+      setCreateTenor('10');
+      setCreateApr('8.0');
+      setCreatePenalty('2.0');
+      setCreateMinDeposit('10');
+      setCreateMaxDeposit('10000');
+      if (onRefetchPlans) await onRefetchPlans();
+      await onSuccess();
+    } catch (err: any) {
+      console.error('Create plan failed:', err);
+      const errText = parseContractError(err, { core: savingCore, vault });
+      addToast('error', errText, { title: 'Tạo Gói Thất Bại' });
+    } finally {
+      setIsSubmittingCreate(false);
     }
   };
 
@@ -485,6 +652,304 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           </div>
         </Card>
       </div>
+
+      {/* Card 3: Quản Lý Gói Tiết Kiệm (Tạo, Sửa APR, Bật / Vô hiệu hóa) */}
+      <Card variant="default" className="p-6 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-slate-800 pb-3">
+          <div className="flex items-center space-x-3">
+            <div className="p-2.5 bg-indigo-950/80 text-indigo-400 rounded-xl border border-indigo-800/40">
+              <Layers className="w-5 h-5" />
+            </div>
+            <div>
+              <h3 className="font-extrabold text-base text-white">Quản Lý Gói Tiết Kiệm (Plan Controls)</h3>
+              <p className="text-xs text-slate-400">
+                Thêm gói mới, điều chỉnh lãi suất APR, hoặc bật / vô hiệu hóa nhận khoản gửi mới.
+              </p>
+            </div>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Badge variant="info">
+              {plans?.length || 0} Gói trên hệ thống
+            </Badge>
+            <Button
+              variant="primary"
+              size="sm"
+              disabled={!isUserCoreOwner}
+              disabledReason={!isUserCoreOwner ? 'Chỉ Owner của SavingCore mới có quyền tạo gói' : undefined}
+              onClick={() => setIsCreateModalOpen(true)}
+              icon={<Plus className="w-3.5 h-3.5" />}
+            >
+              Tạo Gói Mới
+            </Button>
+          </div>
+        </div>
+
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3 pt-1">
+          {plans && plans.length > 0 ? (
+            plans.map((p) => {
+              const isCurrentlyEnabled = p.enabled;
+              const isToggling = togglingPlanId === p.planId;
+              return (
+                <div
+                  key={p.planId.toString()}
+                  className={`p-4 rounded-xl border transition-all flex flex-col justify-between space-y-3 ${
+                    isCurrentlyEnabled
+                      ? 'bg-slate-950/60 border-slate-800/80 hover:border-slate-700'
+                      : 'bg-rose-950/15 border-rose-900/40 opacity-80'
+                  }`}
+                >
+                  <div>
+                    <div className="flex items-center justify-between">
+                      <span className="font-mono text-xs font-bold px-2 py-0.5 rounded bg-slate-900 text-indigo-300 border border-slate-800">
+                        Gói #{p.planId.toString()}
+                      </span>
+                      <Badge variant={isCurrentlyEnabled ? 'success' : 'danger'} dot>
+                        {isCurrentlyEnabled ? 'Đang mở' : 'Đã vô hiệu hóa'}
+                      </Badge>
+                    </div>
+
+                    <div className="mt-3 flex items-baseline justify-between">
+                      <div className="text-xl font-black text-white tabular-nums">
+                        {formatTenorUnit(p.tenorDays, timeUnit)}
+                      </div>
+                      <div className="text-sm font-bold text-emerald-400 tabular-nums">
+                        APR {formatBps(p.aprBps)}
+                      </div>
+                    </div>
+
+                    <div className="mt-1 text-[11px] text-slate-400 flex justify-between">
+                      <span>Phạt rút sớm: <strong className="text-amber-400">{formatBps(p.earlyWithdrawPenaltyBps)}</strong></span>
+                      <span>Hạn mức: <strong className="text-slate-300">{p.minDeposit > 0n ? formatUnits6(p.minDeposit) : '0'} USDC</strong></span>
+                    </div>
+                  </div>
+
+                  <div className="pt-2 border-t border-slate-800/60 grid grid-cols-2 gap-2">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      disabled={!isUserCoreOwner}
+                      disabledReason={!isUserCoreOwner ? 'Chỉ Owner của SavingCore mới có quyền sửa APR' : undefined}
+                      onClick={() => handleOpenEditApr(p)}
+                      icon={<Edit3 className="w-3.5 h-3.5" />}
+                    >
+                      Sửa APR
+                    </Button>
+                    <Button
+                      variant={isCurrentlyEnabled ? 'danger' : 'emerald'}
+                      size="sm"
+                      isLoading={isToggling}
+                      loadingText="..."
+                      disabled={!isUserCoreOwner}
+                      disabledReason={!isUserCoreOwner ? 'Chỉ Owner của SavingCore mới có quyền đổi trạng thái gói' : undefined}
+                      onClick={() => handleTogglePlan(p.planId, isCurrentlyEnabled)}
+                      icon={isCurrentlyEnabled ? <Ban className="w-3.5 h-3.5" /> : <Power className="w-3.5 h-3.5" />}
+                    >
+                      {isCurrentlyEnabled ? 'Vô Hiệu Hóa' : 'Kích Hoạt'}
+                    </Button>
+                  </div>
+                </div>
+              );
+            })
+          ) : (
+            <div className="col-span-full py-8 text-center text-slate-500 text-xs">
+              Chưa có gói tiết kiệm nào trên hệ thống
+            </div>
+          )}
+        </div>
+      </Card>
+
+      {/* Modal: Sửa APR Gói */}
+      <Modal
+        isOpen={isUpdateAprModalOpen}
+        onClose={() => {
+          if (!isSubmittingApr) setIsUpdateAprModalOpen(false);
+        }}
+        title={`Cập Nhật APR - Gói #${selectedPlanForEdit?.planId.toString() ?? ''}`}
+        subtitle={`Kỳ hạn ${selectedPlanForEdit ? formatTenorUnit(selectedPlanForEdit.tenorDays, timeUnit) : ''} (Hiện tại: ${selectedPlanForEdit ? formatBps(selectedPlanForEdit.aprBps) : ''})`}
+        icon={<Edit3 className="w-5 h-5 text-indigo-400" />}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              size="md"
+              disabled={isSubmittingApr}
+              onClick={() => setIsUpdateAprModalOpen(false)}
+            >
+              Hủy
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              isLoading={isSubmittingApr}
+              loadingText="Đang lưu..."
+              onClick={handleUpdateApr}
+            >
+              Lưu Cập Nhật
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="p-3 bg-amber-950/20 border border-amber-900/40 rounded-xl text-xs text-amber-300">
+            Lưu ý: Thay đổi APR chỉ áp dụng cho các sổ mở mới hoặc các sổ tự động tái tục sau thời điểm cập nhật. Các sổ đang chạy vẫn giữ nguyên mức lãi suất đã chốt ban đầu.
+          </div>
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1.5">
+              Lãi suất APR mới (% / năm):
+            </label>
+            <div className="relative">
+              <input
+                type="number"
+                step="0.01"
+                min="0.01"
+                max="100"
+                value={newAprInput}
+                onChange={(e) => setNewAprInput(e.target.value)}
+                placeholder="Ví dụ: 8.5"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 pr-12 tabular-nums"
+              />
+              <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-bold">%</span>
+            </div>
+            <p className="text-[11px] text-slate-400 mt-1">
+              Quy đổi: {newAprInput ? Math.round(parseFloat(newAprInput || '0') * 100) : 0} BPS (Basis Points).
+            </p>
+          </div>
+        </div>
+      </Modal>
+
+      {/* Modal: Tạo Gói Mới */}
+      <Modal
+        isOpen={isCreateModalOpen}
+        onClose={() => {
+          if (!isSubmittingCreate) setIsCreateModalOpen(false);
+        }}
+        title="Tạo Gói Tiết Kiệm Mới (Create Plan)"
+        subtitle="Thiết lập kỳ hạn, lãi suất APR và điều kiện phạt rút sớm trên Smart Contract"
+        icon={<Plus className="w-5 h-5 text-indigo-400" />}
+        footer={
+          <>
+            <Button
+              variant="ghost"
+              size="md"
+              disabled={isSubmittingCreate}
+              onClick={() => setIsCreateModalOpen(false)}
+            >
+              Hủy
+            </Button>
+            <Button
+              variant="primary"
+              size="md"
+              isLoading={isSubmittingCreate}
+              loadingText="Đang tạo..."
+              onClick={handleCreatePlan}
+            >
+              Tạo Gói Mới
+            </Button>
+          </>
+        }
+      >
+        <div className="space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Kỳ hạn ({timeUnit && timeUnit <= 60n ? 'phút' : 'ngày'}):
+              </label>
+              <input
+                type="number"
+                min="1"
+                max="3650"
+                value={createTenor}
+                onChange={(e) => setCreateTenor(e.target.value)}
+                placeholder="10"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 tabular-nums"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                {timeUnit && timeUnit <= 60n ? 'Demo: 1 đơn vị = 1 phút (60s)' : '1 đơn vị = 1 ngày (86400s)'}
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Lãi suất APR (% / năm):
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0.01"
+                  max="100"
+                  value={createApr}
+                  onChange={(e) => setCreateApr(e.target.value)}
+                  placeholder="8.0"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 pr-8 tabular-nums"
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-bold">%</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Tương đương: {createApr ? Math.round(parseFloat(createApr || '0') * 100) : 0} BPS
+              </p>
+            </div>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Phạt rút trước hạn (%):
+              </label>
+              <div className="relative">
+                <input
+                  type="number"
+                  step="0.01"
+                  min="0"
+                  max="100"
+                  value={createPenalty}
+                  onChange={(e) => setCreatePenalty(e.target.value)}
+                  placeholder="2.0"
+                  className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 pr-8 tabular-nums"
+                />
+                <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-bold">%</span>
+              </div>
+              <p className="text-[11px] text-slate-400 mt-1">
+                Ví dụ: 2% trên số vốn gốc rút sớm
+              </p>
+            </div>
+
+            <div>
+              <label className="block text-xs font-semibold text-slate-300 mb-1">
+                Gửi tối thiểu (USDC):
+              </label>
+              <input
+                type="number"
+                min="0"
+                value={createMinDeposit}
+                onChange={(e) => setCreateMinDeposit(e.target.value)}
+                placeholder="10"
+                className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 tabular-nums"
+              />
+              <p className="text-[11px] text-slate-400 mt-1">
+                Mặc định: 10 USDC (hoặc 0 nếu không yêu cầu)
+              </p>
+            </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-semibold text-slate-300 mb-1">
+              Gửi tối đa (USDC - bỏ trống nếu không giới hạn):
+            </label>
+            <input
+              type="number"
+              min="0"
+              value={createMaxDeposit}
+              onChange={(e) => setCreateMaxDeposit(e.target.value)}
+              placeholder="10000"
+              className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 tabular-nums"
+            />
+            <p className="text-[11px] text-slate-400 mt-1">
+              Nhập 0 hoặc để trống nếu gói không giới hạn số tiền gửi tối đa
+            </p>
+          </div>
+        </div>
+      </Modal>
     </div>
   );
 };
