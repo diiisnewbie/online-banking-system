@@ -57,7 +57,11 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
 
   const isActive = status === DepositStatus.Active;
   const isMatured = currentSimulatedTime >= maturityAt;
-  const isPastGrace = currentSimulatedTime >= maturityAt + gracePeriod;
+
+  // Tên gói tương ứng
+  const planInfo = plans.find((p) => p.planId === planId);
+  const planGrace = planInfo?.timeUnit && planInfo.timeUnit <= 60n ? 60n : gracePeriod;
+  const isPastGrace = currentSimulatedTime >= maturityAt + planGrace;
 
   // Tiền lãi toàn kỳ (snapshot)
   const tenorSeconds = maturityAt - startAt;
@@ -73,10 +77,8 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
     progressPercent = 100;
   }
 
-  // Tên gói tương ứng
-  const planInfo = plans.find((p) => p.planId === planId);
   const planName = planInfo
-    ? tenorSeconds <= 600n
+    ? (planInfo.timeUnit && planInfo.timeUnit <= 60n) || tenorSeconds <= 3600n
       ? `Gói ${planInfo.tenorDays.toString()} Phút`
       : `Gói ${planInfo.tenorDays.toString()} Ngày`
     : `Gói #${planId.toString()}`;

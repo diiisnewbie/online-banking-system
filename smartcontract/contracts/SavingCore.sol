@@ -56,6 +56,7 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
 
     // --- Events ---
     event PlanCreated(uint256 indexed planId, uint256 tenorDays, uint256 aprBps);
+    event PlanCreatedWithUnit(uint256 indexed planId, uint256 tenorUnits, uint256 aprBps, uint256 timeUnitSeconds);
     event PlanUpdated(uint256 indexed planId, uint256 newAprBps);
     event DepositOpened(
         uint256 indexed depositId,
@@ -108,6 +109,7 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
 
     mapping(uint256 => SavingPlan) public plans;
     mapping(uint256 => DepositCertificate) public certificates;
+    mapping(uint256 => uint256) public planTimeUnit;
 
     modifier whenSystemNotPaused() {
         if (vault.paused()) revert SystemPaused();
@@ -171,6 +173,39 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
         return _createPlan(tenorDays, aprBps, minDeposit, maxDeposit, penaltyBps);
     }
 
+    function createPlanWithCustomUnit(
+        uint256 tenorUnits,
+        uint256 aprBps,
+        uint256 minDeposit,
+        uint256 maxDeposit,
+        uint256 penaltyBps,
+        uint256 customTimeUnit
+    ) external onlyOwner returns (uint256 planId) {
+        planId = _createPlan(tenorUnits, aprBps, minDeposit, maxDeposit, penaltyBps);
+        if (customTimeUnit > 0) {
+            planTimeUnit[planId] = customTimeUnit;
+        }
+        emit PlanCreatedWithUnit(planId, tenorUnits, aprBps, getPlanTimeUnit(planId));
+    }
+
+    function getPlanTimeUnit(uint256 planId) public view returns (uint256) {
+        uint256 u = planTimeUnit[planId];
+        return u == 0 ? timeUnit : u;
+    }
+
+    function getPlanDurationSeconds(uint256 planId) public view returns (uint256) {
+        if (planId >= planCount) revert PlanNotFound(planId);
+        return plans[planId].tenorDays * getPlanTimeUnit(planId);
+    }
+
+    function getPlanGracePeriod(uint256 planId) public view returns (uint256) {
+        uint256 u = getPlanTimeUnit(planId);
+        if (u <= 60) {
+            return 60; // 1 phut an han cho cac goi demo phut
+        }
+        return gracePeriod;
+    }
+
     function updatePlan(uint256 planId, uint256 newAprBps) external onlyOwner {
         if (planId >= planCount) revert PlanNotFound(planId);
         if (newAprBps < 1 || newAprBps > 10000) revert InvalidPlanParams();
@@ -199,7 +234,8 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
         if (plan.maxDeposit > 0 && amount > plan.maxDeposit) revert InvalidDepositAmount();
 
         depositId = nextDepositId++;
-        uint256 maturityAt = block.timestamp + plan.tenorDays * timeUnit;
+        uint256 tenorSeconds = getPlanDurationSeconds(planId);
+        uint256 maturityAt = block.timestamp + tenorSeconds;
 
         certificates[depositId] = DepositCertificate({
             depositId: depositId,
@@ -212,7 +248,7 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
             status: DepositStatus.Active
         });
 
-        uint256 interest = _calcInterest(amount, plan.aprBps, plan.tenorDays * timeUnit);
+        uint256 interest = _calcInterest(amount, plan.aprBps, tenorSeconds);
         totalCommittedInterest += interest;
 
         emit DepositOpened(depositId, msg.sender, planId, amount, maturityAt, plan.aprBps);
@@ -300,7 +336,8 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
         oldCert.status = DepositStatus.ManualRenewed;
 
         newDepositId = nextDepositId++;
-        uint256 newMaturityAt = block.timestamp + newPlan.tenorDays * timeUnit;
+        uint256 tenorSeconds = getPlanDurationSeconds(newPlanId);
+        uint256 newMaturityAt = block.timestamp + tenorSeconds;
 
         certificates[newDepositId] = DepositCertificate({
             depositId: newDepositId,
@@ -313,7 +350,7 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
             status: DepositStatus.Active
         });
 
-        uint256 newInterest = _calcInterest(newPrincipal, newPlan.aprBps, newPlan.tenorDays * timeUnit);
+        uint256 newInterest = _calcInterest(newPrincipal, newPlan.aprBps, tenorSeconds);
         totalCommittedInterest = totalCommittedInterest - oldInterest + newInterest;
 
         emit Renewed(oldDepositId, newDepositId, newPrincipal, newPlanId);
@@ -327,7 +364,8 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
 
         DepositCertificate storage oldCert = certificates[oldDepositId];
         if (oldCert.status != DepositStatus.Active) revert DepositNotActive();
-        if (block.timestamp < oldCert.maturityAt + gracePeriod) revert NotMatured();
+        uint256 planGrace = getPlanGracePeriod(oldCert.planId);
+        if (block.timestamp < oldCert.maturityAt + planGrace) revert NotMatured();
 
         uint256 oldTenor = oldCert.maturityAt - oldCert.startAt;
         uint256 oldInterest = _calcInterest(oldCert.principal, oldCert.aprBpsAtOpen, oldTenor);

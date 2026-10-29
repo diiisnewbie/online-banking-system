@@ -13,6 +13,7 @@ export interface SavingPlan {
   maxDeposit: bigint;
   earlyWithdrawPenaltyBps: bigint;
   enabled: boolean;
+  timeUnit?: bigint;
 }
 
 export interface DepositCertificate {

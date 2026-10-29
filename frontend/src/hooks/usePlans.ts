@@ -17,18 +17,25 @@ export function usePlans(savingCore: ethers.Contract | null) {
         savingCore.getAllPlans(),
         savingCore.timeUnit().catch(() => 86400n),
       ]);
+      const contractTimeUnit = tu ? BigInt(tu) : 86400n;
       if (tu) {
-        setTimeUnit(BigInt(tu));
+        setTimeUnit(contractTimeUnit);
       }
-      const parsedPlans: SavingPlan[] = rawPlans.map((p: any) => ({
-        planId: BigInt(p.planId),
-        tenorDays: BigInt(p.tenorDays),
-        aprBps: BigInt(p.aprBps),
-        minDeposit: BigInt(p.minDeposit),
-        maxDeposit: BigInt(p.maxDeposit),
-        earlyWithdrawPenaltyBps: BigInt(p.earlyWithdrawPenaltyBps),
-        enabled: Boolean(p.enabled),
-      }));
+      const parsedPlans: SavingPlan[] = await Promise.all(
+        rawPlans.map(async (p: any) => {
+          const planTu = await savingCore.getPlanTimeUnit(p.planId).catch(() => contractTimeUnit);
+          return {
+            planId: BigInt(p.planId),
+            tenorDays: BigInt(p.tenorDays),
+            aprBps: BigInt(p.aprBps),
+            minDeposit: BigInt(p.minDeposit),
+            maxDeposit: BigInt(p.maxDeposit),
+            earlyWithdrawPenaltyBps: BigInt(p.earlyWithdrawPenaltyBps),
+            enabled: Boolean(p.enabled),
+            timeUnit: BigInt(planTu),
+          };
+        })
+      );
       setPlans(parsedPlans);
     } catch (err: any) {
       console.warn('getAllPlans failed (expected if not deployed yet):', err);

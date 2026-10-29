@@ -1,10 +1,12 @@
 import { buildModule } from "@nomicfoundation/hardhat-ignition/modules";
 
-// Tham so toi uu cho moi truong Live Testnet (Sepolia)
-// Ky han 1 phut, Grace Period 1 phut (sau 1 phut nua Auto-Renew kich hoat)
+// Thiet lap chuan theo de thi va MSSV 22699741 (A=1, B=4):
+// - Plan 0: 90 Ngay (B chan), APR 2.25% (200 + A*25), Phat 5.00% (300 + B*50)
+// - Grace Period: 3 ngay (259,200s) = (A % 3 + 2) ngay
+// - TimeUnit mac dinh: 86,400s (1 ngay)
 const SEPOLIA_FUND_AMOUNT = 100_000_000_000n; // 100,000 USDC cho Vault
-const SEPOLIA_GRACE_PERIOD_SECONDS = 60n;     // 1 phut an han (60 giay)
-const SEPOLIA_TIME_UNIT_SECONDS = 60n;         // 1 don vi ky han = 60 giay (1 phut)
+const SEPOLIA_GRACE_PERIOD_SECONDS = 259_200n; // 3 ngay an han (259,200 giay)
+const SEPOLIA_TIME_UNIT_SECONDS = 86_400n;     // 1 don vi ky han = 86,400 giay (1 ngay)
 
 export default buildModule("BankingSystemSepolia", (m) => {
   const deployer = m.getAccount(0);
@@ -13,18 +15,18 @@ export default buildModule("BankingSystemSepolia", (m) => {
   const usdc = m.contract("MockUSDC");
   const vault = m.contract("VaultManager", [usdc, deployer]);
 
-  // Plan 0: Ky han 1 phut (1 * 60s = 60s)
+  // Plan 0: 90 Ngay, APR 2.25%, Phat 5.00%, Min 10 USDC, Max 100,000 USDC
   const core = m.contract("SavingCore", [
     usdc,
     vault,
     deployer,
-    SEPOLIA_GRACE_PERIOD_SECONDS, // 60s grace period (1 phut)
-    1n,                           // Plan 0: 1 phut
+    SEPOLIA_GRACE_PERIOD_SECONDS, // 3 ngay an han (259,200s)
+    90n,                          // Plan 0: 90 ngay
     225n,                         // 2.25% APR (225 bps theo MSSV A=1)
     500n,                         // 5.00% phat rut som (500 bps theo MSSV B=4)
     10_000_000n,                  // Min: 10 USDC
-    10_000_000_000n,              // Max: 10,000 USDC
-    SEPOLIA_TIME_UNIT_SECONDS,    // TimeUnit = 60s (1 phut)
+    100_000_000_000n,             // Max: 100,000 USDC
+    SEPOLIA_TIME_UNIT_SECONDS,    // TimeUnit = 86,400s (1 ngay)
   ]);
 
   // 2. Wire SavingCore to VaultManager
@@ -41,19 +43,19 @@ export default buildModule("BankingSystemSepolia", (m) => {
     after: [approveVault, wire],
   });
 
-  // 4. Seed Them Plan 1 (Ky han 3 phut) & Plan 2 (Ky han 5 phut)
+  // 4. Seed Them Plan 1 (30 Ngay, 3.00% APR) & Plan 2 (180 Ngay, 4.50% APR)
   const plan1 = m.call(
     core,
     "createPlan",
-    [3n, 700n, 10_000_000n, 50_000_000_000n, 500n], // 3 phut, 7% APR
-    { id: "createPlan3Minutes", after: [wire] }
+    [30n, 300n, 10_000_000n, 50_000_000_000n, 500n], // 30 ngay, 3.00% APR
+    { id: "createPlan30Days", after: [wire] }
   );
 
   const plan2 = m.call(
     core,
     "createPlan",
-    [5n, 1000n, 10_000_000n, 50_000_000_000n, 500n], // 5 phut, 10% APR
-    { id: "createPlan5Minutes", after: [plan1] }
+    [180n, 450n, 10_000_000n, 100_000_000_000n, 500n], // 180 ngay, 4.50% APR
+    { id: "createPlan180Days", after: [plan1] }
   );
 
   return { usdc, vault, core };

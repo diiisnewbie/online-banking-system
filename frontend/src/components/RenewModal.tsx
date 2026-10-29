@@ -84,7 +84,7 @@ export const RenewModal: React.FC<RenewModalProps> = ({
   // Ngày đáo hạn mới ước tính
   const unit = timeUnit || 86400n;
   const nowSec = currentSimulatedTime || BigInt(Math.floor(Date.now() / 1000));
-  const newTenorSeconds = targetPlan ? targetPlan.tenorDays * unit : 0n;
+  const newTenorSeconds = targetPlan ? targetPlan.tenorDays * (targetPlan.timeUnit || unit) : 0n;
   const newMaturityAt = nowSec + newTenorSeconds;
 
   // Kiểm tra thanh khoản Vault
@@ -233,7 +233,7 @@ export const RenewModal: React.FC<RenewModalProps> = ({
                 >
                   <div className="text-[11px] font-mono text-slate-400">Gói #{p.planId.toString()}</div>
                   <div className="text-indigo-400 text-sm font-black tabular-nums">
-                    {formatTenorUnit(p.tenorDays, unit)}
+                    {formatTenorUnit(p.tenorDays, p.timeUnit || unit)}
                   </div>
                   <div className="text-[11px] text-emerald-400 font-bold tabular-nums">{formatBps(p.aprBps)}/năm</div>
                 </button>

@@ -78,7 +78,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
   const [isSubmittingApr, setIsSubmittingApr] = useState<boolean>(false);
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
-  const [createTenor, setCreateTenor] = useState<string>('10');
+  const [createUnit, setCreateUnit] = useState<'minutes' | 'days'>('minutes');
+  const [createTenor, setCreateTenor] = useState<string>('5');
   const [createApr, setCreateApr] = useState<string>('2.25');
   const [createPenalty, setCreatePenalty] = useState<string>('5.0');
   const [createMinDeposit, setCreateMinDeposit] = useState<string>('10');
@@ -377,19 +378,22 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       const penaltyBpsBn = BigInt(Math.round(penaltyNum * 100));
       const minDepositBn = ethers.parseUnits(minNum.toString(), 6);
       const maxDepositBn = maxNum > 0 ? ethers.parseUnits(maxNum.toString(), 6) : 0n;
+      const unitSeconds = createUnit === 'minutes' ? 60n : 86400n;
 
-      const tx = await savingCore.createPlan(tenorBn, aprBpsBn, minDepositBn, maxDepositBn, penaltyBpsBn);
+      const tx = savingCore.createPlanWithCustomUnit
+        ? await savingCore.createPlanWithCustomUnit(tenorBn, aprBpsBn, minDepositBn, maxDepositBn, penaltyBpsBn, unitSeconds)
+        : await savingCore.createPlan(tenorBn, aprBpsBn, minDepositBn, maxDepositBn, penaltyBpsBn);
       const receipt = await tx.wait();
       addToast(
         'success',
-        `Tạo mới gói kỳ hạn ${tenorNum} (${timeUnit && timeUnit <= 60n ? 'phút' : 'ngày'}), APR ${aprNum}% thành công!`,
+        `Tạo mới gói kỳ hạn ${tenorNum} ${createUnit === 'minutes' ? 'Phút' : 'Ngày'}, APR ${aprNum}% thành công!`,
         {
           title: 'Tạo Gói Mới Thành Công',
           txHash: receipt?.hash || tx.hash,
         }
       );
       setIsCreateModalOpen(false);
-      setCreateTenor('10');
+      setCreateTenor('5');
       setCreateApr('2.25');
       setCreatePenalty('5.0');
       setCreateMinDeposit('10');
@@ -710,7 +714,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
                     <div className="mt-3 flex items-baseline justify-between">
                       <div className="text-xl font-black text-white tabular-nums">
-                        {formatTenorUnit(p.tenorDays, timeUnit)}
+                        {formatTenorUnit(p.tenorDays, p.timeUnit || timeUnit)}
                       </div>
                       <div className="text-sm font-bold text-emerald-400 tabular-nums">
                         APR {formatBps(p.aprBps)}
@@ -765,7 +769,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           if (!isSubmittingApr) setIsUpdateAprModalOpen(false);
         }}
         title={`Cập Nhật APR - Gói #${selectedPlanForEdit?.planId.toString() ?? ''}`}
-        subtitle={`Kỳ hạn ${selectedPlanForEdit ? formatTenorUnit(selectedPlanForEdit.tenorDays, timeUnit) : ''} (Hiện tại: ${selectedPlanForEdit ? formatBps(selectedPlanForEdit.aprBps) : ''})`}
+        subtitle={`Kỳ hạn ${selectedPlanForEdit ? formatTenorUnit(selectedPlanForEdit.tenorDays, selectedPlanForEdit.timeUnit || timeUnit) : ''} (Hiện tại: ${selectedPlanForEdit ? formatBps(selectedPlanForEdit.aprBps) : ''})`}
         icon={<Edit3 className="w-5 h-5 text-indigo-400" />}
         footer={
           <>
@@ -849,10 +853,46 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
         }
       >
         <div className="space-y-4">
+          {/* Chọn đơn vị thời gian: Phút (test demo) hoặc Ngày (chuẩn) */}
+          <div className="p-3 bg-slate-950/80 rounded-xl border border-slate-800 space-y-1.5">
+            <label className="block text-xs font-semibold text-slate-300">
+              Đơn vị thời gian cho gói này:
+            </label>
+            <div className="grid grid-cols-2 gap-2">
+              <button
+                type="button"
+                onClick={() => setCreateUnit('minutes')}
+                className={`py-2 px-3 rounded-lg border text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
+                  createUnit === 'minutes'
+                    ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300 shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <span>⚡ Phút (Test Demo)</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setCreateUnit('days')}
+                className={`py-2 px-3 rounded-lg border text-xs font-bold transition-all flex items-center justify-center space-x-1.5 ${
+                  createUnit === 'days'
+                    ? 'bg-indigo-600/30 border-indigo-500 text-indigo-300 shadow-sm'
+                    : 'bg-slate-900 border-slate-800 text-slate-400 hover:border-slate-700'
+                }`}
+              >
+                <span>📅 Ngày (Chuẩn Đề)</span>
+              </button>
+            </div>
+            <p className="text-[11px] text-slate-400">
+              {createUnit === 'minutes'
+                ? '⚡ Gói theo phút: Đáo hạn và ân hạn tính bằng phút, thích hợp mở sổ quay demo và kích hoạt Auto-Renew ngay.'
+                : '📅 Gói theo ngày: Chuẩn đề bài (1 ngày = 86,400 giây).'}
+            </p>
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Kỳ hạn (phút):
+                Kỳ hạn ({createUnit === 'minutes' ? 'phút' : 'ngày'}):
               </label>
               <input
                 type="number"
@@ -860,11 +900,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 max="3650"
                 value={createTenor}
                 onChange={(e) => setCreateTenor(e.target.value)}
-                placeholder="10"
+                placeholder={createUnit === 'minutes' ? '5' : '90'}
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 tabular-nums"
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                Kỳ hạn tính bằng phút (1 phút = 60s) để kiểm thử nhanh
+                {createUnit === 'minutes' ? 'Kỳ hạn tính bằng phút (1 phút = 60s)' : 'Kỳ hạn tính bằng ngày (1 ngày = 86,400s)'}
               </p>
             </div>
 

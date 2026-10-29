@@ -98,7 +98,7 @@ export const OpenDepositModal: React.FC<OpenDepositModalProps> = ({
 
   // Tính lãi dự kiến và ngày đáo hạn
   const unit = timeUnit || 86400n;
-  const tenorSeconds = currentPlan ? currentPlan.tenorDays * unit : 0n;
+  const tenorSeconds = currentPlan ? currentPlan.tenorDays * (currentPlan.timeUnit || unit) : 0n;
   const previewInterest = currentPlan
     ? calculatePreviewInterest(parsedAmount, currentPlan.aprBps, tenorSeconds)
     : 0n;
@@ -364,7 +364,7 @@ export const OpenDepositModal: React.FC<OpenDepositModalProps> = ({
 
             <div className="flex justify-between items-center">
               <span className="text-slate-400">Thời gian khóa gốc:</span>
-              <span className="font-semibold text-white">{currentPlan.tenorDays.toString()} ngày</span>
+              <span className="font-semibold text-white">{formatTenorUnit(currentPlan.tenorDays, currentPlan.timeUnit || unit)}</span>
             </div>
           </div>
 

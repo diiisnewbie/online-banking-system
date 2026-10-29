@@ -522,6 +522,37 @@
       },
       {
         "indexed": false,
+        "internalType": "uint256",
+        "name": "tenorUnits",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "aprBps",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
+        "internalType": "uint256",
+        "name": "timeUnitSeconds",
+        "type": "uint256"
+      }
+    ],
+    "name": "PlanCreatedWithUnit",
+    "type": "event"
+  },
+  {
+    "anonymous": false,
+    "inputs": [
+      {
+        "indexed": true,
+        "internalType": "uint256",
+        "name": "planId",
+        "type": "uint256"
+      },
+      {
+        "indexed": false,
         "internalType": "bool",
         "name": "enabled",
         "type": "bool"
@@ -798,6 +829,50 @@
       {
         "internalType": "uint256",
         "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "nonpayable",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "tenorUnits",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "aprBps",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "minDeposit",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "maxDeposit",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "penaltyBps",
+        "type": "uint256"
+      },
+      {
+        "internalType": "uint256",
+        "name": "customTimeUnit",
+        "type": "uint256"
+      }
+    ],
+    "name": "createPlanWithCustomUnit",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "planId",
         "type": "uint256"
       }
     ],
@@ -1091,6 +1166,63 @@
     "type": "function"
   },
   {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "planId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getPlanDurationSeconds",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "planId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getPlanGracePeriod",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "planId",
+        "type": "uint256"
+      }
+    ],
+    "name": "getPlanTimeUnit",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
     "inputs": [],
     "name": "gracePeriod",
     "outputs": [
@@ -1212,6 +1344,25 @@
   {
     "inputs": [],
     "name": "planCount",
+    "outputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "stateMutability": "view",
+    "type": "function"
+  },
+  {
+    "inputs": [
+      {
+        "internalType": "uint256",
+        "name": "",
+        "type": "uint256"
+      }
+    ],
+    "name": "planTimeUnit",
     "outputs": [
       {
         "internalType": "uint256",

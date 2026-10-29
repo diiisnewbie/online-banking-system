@@ -102,7 +102,7 @@ export const PlansList: React.FC<PlansListProps> = ({
                         {plan.tenorDays.toString()}
                       </span>
                       <span className="text-sm font-bold text-slate-400">
-                        {timeUnit && timeUnit <= 60n ? 'Phút' : 'Ngày'}
+                        {(plan.timeUnit ?? timeUnit ?? 86400n) <= 60n ? 'Phút' : 'Ngày'}
                       </span>
                     </div>
                     <div className="text-[11px] text-slate-500 font-medium">Kỳ hạn gửi cố định</div>
