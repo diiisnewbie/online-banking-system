@@ -1,7 +1,7 @@
 # ONLINE BANKING SYSTEM — TERM DEPOSIT VỚI ERC-721 CERTIFICATE
 
 > **Đồ án môn học**: Blockchain Programming / Lập trình Blockchain  
-> **Sinh viên thực hiện**: Nguyễn Văn A (Ví dụ) — **MSSV: 20210041** (Hai chữ số cuối: **41**)  
+> **Sinh viên thực hiện**: **MSSV: 22699741** (Hai chữ số cuối: **41**)  
 > **Chữ số cuối ($A$)**: `1` · **Chữ số kế cuối ($B$)**: `4`  
 > **Frontend Stack**: React 18, TypeScript, TailwindCSS v3 (`^3.4.17`), Ethers.js v6  
 

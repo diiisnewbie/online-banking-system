@@ -79,10 +79,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState<boolean>(false);
   const [createTenor, setCreateTenor] = useState<string>('10');
-  const [createApr, setCreateApr] = useState<string>('8.0');
-  const [createPenalty, setCreatePenalty] = useState<string>('2.0');
+  const [createApr, setCreateApr] = useState<string>('2.25');
+  const [createPenalty, setCreatePenalty] = useState<string>('5.0');
   const [createMinDeposit, setCreateMinDeposit] = useState<string>('10');
-  const [createMaxDeposit, setCreateMaxDeposit] = useState<string>('10000');
+  const [createMaxDeposit, setCreateMaxDeposit] = useState<string>('100000');
   const [isSubmittingCreate, setIsSubmittingCreate] = useState<boolean>(false);
 
   const loadAdminData = async () => {
@@ -390,10 +390,10 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
       );
       setIsCreateModalOpen(false);
       setCreateTenor('10');
-      setCreateApr('8.0');
-      setCreatePenalty('2.0');
+      setCreateApr('2.25');
+      setCreatePenalty('5.0');
       setCreateMinDeposit('10');
-      setCreateMaxDeposit('10000');
+      setCreateMaxDeposit('100000');
       if (onRefetchPlans) await onRefetchPlans();
       await onSuccess();
     } catch (err: any) {
@@ -852,7 +852,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
               <label className="block text-xs font-semibold text-slate-300 mb-1">
-                Kỳ hạn ({timeUnit && timeUnit <= 60n ? 'phút' : 'ngày'}):
+                Kỳ hạn (phút):
               </label>
               <input
                 type="number"
@@ -864,7 +864,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 tabular-nums"
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                {timeUnit && timeUnit <= 60n ? 'Demo: 1 đơn vị = 1 phút (60s)' : '1 đơn vị = 1 ngày (86400s)'}
+                Kỳ hạn tính bằng phút (1 phút = 60s) để kiểm thử nhanh
               </p>
             </div>
 
@@ -880,13 +880,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   max="100"
                   value={createApr}
                   onChange={(e) => setCreateApr(e.target.value)}
-                  placeholder="8.0"
+                  placeholder="2.25"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 pr-8 tabular-nums"
                 />
                 <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-bold">%</span>
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Tương đương: {createApr ? Math.round(parseFloat(createApr || '0') * 100) : 0} BPS
+                Gợi ý MSSV (A=1): 2.25% ({createApr ? Math.round(parseFloat(createApr || '0') * 100) : 0} BPS)
               </p>
             </div>
           </div>
@@ -904,13 +904,13 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                   max="100"
                   value={createPenalty}
                   onChange={(e) => setCreatePenalty(e.target.value)}
-                  placeholder="2.0"
+                  placeholder="5.0"
                   className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 pr-8 tabular-nums"
                 />
                 <span className="absolute right-3 top-2.5 text-xs text-slate-500 font-bold">%</span>
               </div>
               <p className="text-[11px] text-slate-400 mt-1">
-                Ví dụ: 2% trên số vốn gốc rút sớm
+                Gợi ý MSSV (B=4): 5.00% ({createPenalty ? Math.round(parseFloat(createPenalty || '0') * 100) : 0} BPS)
               </p>
             </div>
 
@@ -927,7 +927,7 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 tabular-nums"
               />
               <p className="text-[11px] text-slate-400 mt-1">
-                Mặc định: 10 USDC (hoặc 0 nếu không yêu cầu)
+                Mặc định theo đề: 10 USDC
               </p>
             </div>
           </div>
@@ -941,11 +941,11 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
               min="0"
               value={createMaxDeposit}
               onChange={(e) => setCreateMaxDeposit(e.target.value)}
-              placeholder="10000"
+              placeholder="100000"
               className="w-full bg-slate-950 border border-slate-700 rounded-xl px-3 py-2 text-white font-mono text-sm focus:outline-none focus:border-indigo-500 tabular-nums"
             />
             <p className="text-[11px] text-slate-400 mt-1">
-              Nhập 0 hoặc để trống nếu gói không giới hạn số tiền gửi tối đa
+              Mặc định theo đề: 100,000 USDC (hoặc 0 nếu không giới hạn)
             </p>
           </div>
         </div>
