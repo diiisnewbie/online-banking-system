@@ -25,4 +25,12 @@ export interface DepositCertificate {
   aprBpsAtOpen: bigint;
   penaltyBpsAtOpen: bigint;
   status: DepositStatus;
+  // Metadata mở rộng hỗ trợ Audit & Demo Etherscan
+  openTxHash?: string;
+  settleTxHash?: string;
+  isEarly?: boolean;
+  principalPaid?: bigint;
+  interestPaid?: bigint;
+  penaltyDeducted?: bigint;
+  renewedToDepositId?: bigint;
 }

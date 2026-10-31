@@ -4,6 +4,7 @@ import { SavingPlan } from '../contracts/types';
 import { formatUnits6, formatBps, formatTimestamp, formatTenorUnit } from '../utils/formatters';
 import { calculatePreviewInterest } from '../utils/interest';
 import { parseContractError } from '../utils/errors';
+import { saveCertificateTxInfo } from '../utils/txStorage';
 import { useToast } from './ui/ToastContext';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
@@ -165,6 +166,21 @@ export const OpenDepositModal: React.FC<OpenDepositModalProps> = ({
     try {
       const tx = await savingCore.openDeposit(currentPlan.planId, parsedAmount);
       const receipt = await tx.wait();
+
+      if (receipt && receipt.logs) {
+        for (const log of receipt.logs) {
+          try {
+            const parsed = savingCore.interface.parseLog(log);
+            if (parsed && parsed.name === 'DepositOpened') {
+              const dId = parsed.args.depositId.toString();
+              saveCertificateTxInfo(dId, { openTxHash: receipt.hash || tx.hash });
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
       addToast(
         'success',
         `Mở sổ tiết kiệm thành công! Chứng chỉ NFT đã được đúc về ví của bạn.`,

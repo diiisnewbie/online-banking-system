@@ -4,6 +4,7 @@ import { DepositCertificate, SavingPlan } from '../contracts/types';
 import { formatUnits6, formatBps, formatTimestamp, formatTenorUnit } from '../utils/formatters';
 import { calculatePreviewInterest } from '../utils/interest';
 import { parseContractError } from '../utils/errors';
+import { saveCertificateTxInfo } from '../utils/txStorage';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
 import { useToast } from './ui/ToastContext';
@@ -113,6 +114,26 @@ export const RenewModal: React.FC<RenewModalProps> = ({
 
       const receipt = await tx.wait();
       setTxStatus('success');
+
+      let nextDepositIdStr: string | undefined;
+      if (receipt && receipt.logs) {
+        for (const log of receipt.logs) {
+          try {
+            const parsed = savingCore.interface.parseLog(log);
+            if (parsed && parsed.name === 'Renewed') {
+              nextDepositIdStr = parsed.args.newDepositId.toString();
+              break;
+            }
+          } catch {
+            // ignore
+          }
+        }
+      }
+
+      saveCertificateTxInfo(certificate.depositId.toString(), {
+        settleTxHash: receipt?.hash || tx.hash,
+        renewedToId: nextDepositIdStr,
+      });
 
       addToast(
         'success',

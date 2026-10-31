@@ -4,6 +4,7 @@ import { DepositCertificate } from '../contracts/types';
 import { formatUnits6, formatTimestamp } from '../utils/formatters';
 import { calculatePreviewInterest } from '../utils/interest';
 import { parseContractError } from '../utils/errors';
+import { saveCertificateTxInfo } from '../utils/txStorage';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
 import { useToast } from './ui/ToastContext';
@@ -73,6 +74,13 @@ export const MaturityWithdrawModal: React.FC<MaturityWithdrawModalProps> = ({
 
       const receipt = await tx.wait();
       setTxStatus('success');
+
+      saveCertificateTxInfo(certificate.depositId.toString(), {
+        settleTxHash: receipt?.hash || tx.hash,
+        isEarly: false,
+        principalPaid: certificate.principal.toString(),
+        interestPaid: isVaultShort ? '0' : plannedInterest.toString(),
+      });
 
       const successText = isVaultShort
         ? 'Đã rút 100% gốc! Tiền lãi tạm thời được hoãn và ghi nợ C1 để nhận sau.'

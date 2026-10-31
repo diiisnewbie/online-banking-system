@@ -82,3 +82,24 @@ export function formatCountdown(maturityAt: bigint, currentSimulatedTime: bigint
   }
   return `${minutes} phút ${seconds} giây`;
 }
+
+/**
+ * Rút gọn txHash hoặc địa chỉ ví (ví dụ: 0x1234...5678)
+ */
+export function shortenHash(hash: string | undefined, start: number = 6, end: number = 4): string {
+  if (!hash) return '--';
+  if (hash.length <= start + end) return hash;
+  return `${hash.slice(0, start)}...${hash.slice(-end)}`;
+}
+
+/**
+ * Tạo link xem giao dịch trên Sepolia Etherscan
+ */
+export function getExplorerTxUrl(txHash: string | undefined, chainId?: number | null): string {
+  if (!txHash) return '#';
+  if (chainId === 31337) {
+    return `https://sepolia.etherscan.io/tx/${txHash}`; // Dẫn về sepolia hoặc demo
+  }
+  return `https://sepolia.etherscan.io/tx/${txHash}`;
+}
+

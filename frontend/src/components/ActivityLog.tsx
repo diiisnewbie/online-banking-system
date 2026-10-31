@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { ethers } from 'ethers';
-import { formatUnits6 } from '../utils/formatters';
+import { formatUnits6, getExplorerTxUrl } from '../utils/formatters';
 import { Card } from './ui/Card';
 import { Skeleton } from './ui/Skeleton';
 import {
@@ -216,10 +216,16 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
                     <div className="flex items-center space-x-2 text-[10px] text-slate-400 font-mono mt-0.5">
                       <span>Block #{log.blockNumber}</span>
                       <span>•</span>
-                      <span className="flex items-center space-x-1">
+                      <a
+                        href={getExplorerTxUrl(log.txHash)}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                        className="flex items-center space-x-1 text-slate-400 hover:text-indigo-300 transition"
+                        title="Xem trên Sepolia Etherscan"
+                      >
                         <span>Tx: {log.txHash.slice(0, 8)}...{log.txHash.slice(-6)}</span>
-                        <ExternalLink className="w-2.5 h-2.5 text-slate-400" />
-                      </span>
+                        <ExternalLink className="w-2.5 h-2.5" />
+                      </a>
                     </div>
                   </div>
                 </div>

@@ -1,9 +1,17 @@
 import React, { useState } from 'react';
 import { ethers } from 'ethers';
 import { DepositCertificate, DepositStatus, SavingPlan } from '../contracts/types';
-import { formatUnits6, formatBps, formatTimestamp, formatCountdown } from '../utils/formatters';
+import {
+  formatUnits6,
+  formatBps,
+  formatTimestamp,
+  formatCountdown,
+  shortenHash,
+  getExplorerTxUrl,
+} from '../utils/formatters';
 import { calculatePreviewInterest } from '../utils/interest';
 import { parseContractError } from '../utils/errors';
+import { saveCertificateTxInfo } from '../utils/txStorage';
 import { Card } from './ui/Card';
 import { Badge } from './ui/Badge';
 import { Button } from './ui/Button';
@@ -19,6 +27,11 @@ import {
   Sparkles,
   Bot,
   ArrowRightLeft,
+  Copy,
+  Check,
+  ExternalLink,
+  Receipt,
+  FileCheck2,
 } from 'lucide-react';
 
 interface CertificateCardProps {
@@ -54,9 +67,24 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
   const { addToast } = useToast();
   const [isClaiming, setIsClaiming] = useState(false);
   const [isAutoRenewing, setIsAutoRenewing] = useState(false);
+  const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
-  const { depositId, planId, principal, startAt, maturityAt, aprBpsAtOpen, penaltyBpsAtOpen, status } =
-    certificate;
+  const {
+    depositId,
+    planId,
+    principal,
+    startAt,
+    maturityAt,
+    aprBpsAtOpen,
+    penaltyBpsAtOpen,
+    status,
+    openTxHash,
+    settleTxHash,
+    isEarly,
+    principalPaid,
+    interestPaid,
+    renewedToDepositId,
+  } = certificate;
 
   const isActive = status === DepositStatus.Active;
   const isMatured = currentSimulatedTime >= maturityAt;
@@ -85,6 +113,14 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
       ? `Gói ${planInfo.tenorDays.toString()} Phút`
       : `Gói ${planInfo.tenorDays.toString()} Ngày`
     : `Gói #${planId.toString()}`;
+
+  // Helper copy txHash
+  const handleCopy = (text: string, key: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedKey(key);
+    addToast('info', 'Đã sao chép mã giao dịch vào clipboard!', { title: 'Đã Copy' });
+    setTimeout(() => setCopiedKey(null), 2000);
+  };
 
   // Claim pending interest (C1)
   const handleClaimPending = async () => {
@@ -118,6 +154,11 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
     try {
       const tx = await savingCore.autoRenewDeposit(depositId);
       const receipt = await tx.wait();
+
+      saveCertificateTxInfo(depositId.toString(), {
+        settleTxHash: receipt?.hash || tx.hash,
+      });
+
       addToast(
         'info',
         'Kích hoạt Auto-Renew thành công (áp dụng cơ chế Backdate bù lãi chính xác)!',
@@ -136,26 +177,36 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
     }
   };
 
+  // Tính các con số hiển thị kết toán cho sổ đóng
+  const calculatedPenalty = (principal * penaltyBpsAtOpen) / 10000n;
+  const calculatedEarlyNet = principal > calculatedPenalty ? principal - calculatedPenalty : 0n;
+  const actualPrincipalPaid = principalPaid !== undefined ? principalPaid : calculatedEarlyNet;
+  const actualInterestPaid = interestPaid !== undefined ? interestPaid : plannedInterest;
+
   return (
     <Card
       variant={isActive ? 'interactive' : 'flat'}
       className={`p-5 flex flex-col justify-between relative overflow-hidden transition-all duration-200 ${
-        !isActive ? 'opacity-65 grayscale-[35%] bg-slate-950/40 border-dashed' : ''
+        !isActive ? 'opacity-85 bg-slate-950/60 border-dashed border-slate-800' : ''
       }`}
     >
-      {/* Decorative certificate watermark/strip */}
-      {isActive && (
-        <div
-          className={`absolute top-0 left-0 right-0 h-1 ${
-            isMatured
+      {/* Thanh viền trạng thái trên đầu card */}
+      <div
+        className={`absolute top-0 left-0 right-0 h-1 ${
+          isActive
+            ? isMatured
               ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
               : 'bg-gradient-to-r from-indigo-500 to-indigo-400'
-          }`}
-        />
-      )}
+            : isEarly
+            ? 'bg-gradient-to-r from-rose-500 to-amber-500'
+            : status === DepositStatus.Withdrawn
+            ? 'bg-gradient-to-r from-emerald-600 to-teal-600'
+            : 'bg-gradient-to-r from-sky-500 to-indigo-500'
+        }`}
+      />
 
       <div className="space-y-4">
-        {/* Certificate Header: Token ID, Plan Name, Status Badge */}
+        {/* Certificate Header: Token ID, Plan Name, Chi tiết Status Badge */}
         <div className="flex items-start justify-between gap-2">
           <div>
             <div className="flex items-center space-x-2">
@@ -172,7 +223,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
             </div>
           </div>
 
-          {/* Status Badge */}
+          {/* Phân loại Badge chi tiết */}
           {isActive ? (
             isMatured ? (
               <Badge variant="success" dot size="md">
@@ -185,34 +236,136 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
               </Badge>
             )
           ) : status === DepositStatus.Withdrawn ? (
-            <Badge variant="neutral" size="md">
-              Đã Tất Toán
-            </Badge>
+            isEarly ? (
+              <Badge variant="danger" size="md">
+                ⚠️ Rút Trước Hạn (-5%)
+              </Badge>
+            ) : (
+              <Badge variant="success" size="md">
+                ✓ Đã Đáo Hạn
+              </Badge>
+            )
           ) : status === DepositStatus.ManualRenewed ? (
-            <Badge variant="neutral" size="md">
-              Đã Tái Tục
+            <Badge variant="info" size="md">
+              🔄 Tái Tục Thủ Công
             </Badge>
           ) : (
-            <Badge variant="info" size="md">
-              Đã Auto-Renew
+            <Badge variant="accent" size="md">
+              🤖 Auto-Renew (Backdate)
             </Badge>
           )}
         </div>
 
-        {/* Cảnh báo Không Còn Giá Trị Tài Chính nếu đã đóng sổ */}
+        {/* ============================================================ */}
+        {/* PHẦN 1: BẢNG KẾT TOÁN CHI TIẾT DÀNH CHO SỔ ĐÃ ĐÓNG (HISTORY) */}
+        {/* ============================================================ */}
         {!isActive && (
-          <div className="p-2.5 bg-rose-950/50 border border-rose-800/60 rounded-xl text-center space-y-0.5">
-            <div className="text-[11px] font-black tracking-wider uppercase text-rose-400 flex items-center justify-center space-x-1.5">
-              <AlertTriangle className="w-3.5 h-3.5" />
-              <span>Không Còn Giá Trị Tài Chính</span>
-            </div>
-            <div className="text-[10px] text-slate-400">
-              Chứng chỉ NFT này đã rút hết tiền hoặc đã gia hạn sang sổ mới.
-            </div>
+          <div className="space-y-2.5">
+            {status === DepositStatus.Withdrawn ? (
+              isEarly ? (
+                // 1A. KẾT TOÁN RÚT TRƯỚC HẠN
+                <div className="p-3 bg-rose-950/30 border border-rose-800/60 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-rose-300 font-bold border-b border-rose-900/60 pb-1.5">
+                    <span className="flex items-center space-x-1">
+                      <AlertTriangle className="w-3.5 h-3.5 text-rose-400" />
+                      <span>Biên Lai Rút Trước Hạn</span>
+                    </span>
+                    <span className="text-[10px] text-rose-400/80 uppercase font-mono">
+                      Phạt {formatBps(penaltyBpsAtOpen)}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-slate-400">Tiền gốc ban đầu:</span>
+                      <div className="font-mono font-bold text-slate-200">
+                        {formatUnits6(principal)} USDC
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-rose-400">Khấu trừ phí phạt (5%):</span>
+                      <div className="font-mono font-bold text-rose-300">
+                        -{formatUnits6(calculatedPenalty)} USDC
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-1.5 border-t border-rose-900/40 flex justify-between items-center text-xs">
+                    <span className="text-slate-300 font-semibold">Thực nhận về ví:</span>
+                    <span className="font-mono font-black text-rose-200 text-sm">
+                      +{formatUnits6(actualPrincipalPaid)} USDC
+                    </span>
+                  </div>
+                  <div className="text-[10px] text-slate-400 italic">
+                    * Tiền phạt {formatUnits6(calculatedPenalty)} USDC đã nộp trực tiếp vào Quỹ feeReceiver.
+                  </div>
+                </div>
+              ) : (
+                // 1B. KẾT TOÁN RÚT ĐÚNG HẠN (ĐÁO HẠN HOÀN TOÀN)
+                <div className="p-3 bg-emerald-950/30 border border-emerald-800/60 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-emerald-300 font-bold border-b border-emerald-900/60 pb-1.5">
+                    <span className="flex items-center space-x-1">
+                      <Receipt className="w-3.5 h-3.5 text-emerald-400" />
+                      <span>Biên Lai Tất Toán Đáo Hạn</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-400/80 uppercase font-mono">
+                      Nhận Đủ Gốc + Lãi
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-slate-400">Tiền gốc hoàn trả:</span>
+                      <div className="font-mono font-bold text-slate-200">
+                        {formatUnits6(principal)} USDC
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-emerald-400">Lãi nhận từ Vault:</span>
+                      <div className="font-mono font-bold text-emerald-300">
+                        +{formatUnits6(actualInterestPaid)} USDC
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-1.5 border-t border-emerald-900/40 flex justify-between items-center text-xs">
+                    <span className="text-slate-300 font-semibold">Tổng tiền thanh toán:</span>
+                    <span className="font-mono font-black text-emerald-300 text-sm">
+                      +{formatUnits6(principal + actualInterestPaid)} USDC
+                    </span>
+                  </div>
+                </div>
+              )
+            ) : (
+              // 1C. KẾT TOÁN TÁI TỤC / AUTO-RENEW
+              <div className="p-3 bg-sky-950/30 border border-sky-800/60 rounded-xl space-y-2 text-xs">
+                <div className="flex items-center justify-between text-sky-300 font-bold border-b border-sky-900/60 pb-1.5">
+                  <span className="flex items-center space-x-1">
+                    <RefreshCw className="w-3.5 h-3.5 text-sky-400" />
+                    <span>
+                      {status === DepositStatus.AutoRenewed
+                        ? 'Đã Tự Động Gia Hạn (Backdated)'
+                        : 'Đã Tái Tục Sang Sổ Mới'}
+                    </span>
+                  </span>
+                </div>
+                <div className="text-[11px] text-slate-300 space-y-1">
+                  <div>
+                    Tiền lãi kỳ trước (+{formatUnits6(plannedInterest)} USDC) đã tự động nhập vào gốc mới.
+                  </div>
+                  {renewedToDepositId !== undefined && (
+                    <div className="font-semibold text-sky-300 flex items-center space-x-1 pt-0.5">
+                      <span>Chuyển tiếp thành:</span>
+                      <span className="px-1.5 py-0.5 bg-sky-900/60 rounded font-mono text-white">
+                        NFT #{renewedToDepositId.toString()}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            )}
           </div>
         )}
 
-        {/* Financial Details Table */}
+        {/* ============================================================ */}
+        {/* PHẦN 2: THÔNG SỐ TÀI CHÍNH BAN ĐẦU (ÁP DỤNG CHO CẢ 2 TAB)    */}
+        {/* ============================================================ */}
         <div className="grid grid-cols-2 gap-2.5 bg-slate-950/70 p-3.5 rounded-xl border border-slate-800 text-xs">
           <div>
             <div className="text-[11px] text-slate-400 font-medium">Tiền gốc ban đầu:</div>
@@ -239,7 +392,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
           </div>
         </div>
 
-        {/* Time Progress Bar */}
+        {/* Thanh tiến độ thời gian (Chỉ hiện khi sổ còn Active) */}
         {isActive && (
           <div className="space-y-1.5 pt-1">
             <div className="flex justify-between items-center text-[11px]">
@@ -251,12 +404,11 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
                 {progressPercent}%
               </span>
             </div>
-
-            <div className="w-full bg-slate-800/90 rounded-full h-2 overflow-hidden p-0.5 border border-slate-700/50">
+            <div className="w-full bg-slate-800 rounded-full h-1.5 overflow-hidden">
               <div
-                className={`h-full rounded-full transition-all duration-300 ${
+                className={`h-full transition-all duration-300 ${
                   isMatured
-                    ? 'bg-emerald-500'
+                    ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
                     : 'bg-gradient-to-r from-indigo-500 to-indigo-400'
                 }`}
                 style={{ width: `${progressPercent}%` }}
@@ -265,22 +417,22 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
           </div>
         )}
 
-        {/* Dates & Countdown */}
-        <div className="space-y-1 text-xs text-slate-400 pt-1">
+        {/* Chi tiết Ngày bắt đầu & Ngày đáo hạn */}
+        <div className="bg-slate-900/50 p-2.5 rounded-lg border border-slate-800/60 space-y-1 text-[11px]">
           <div className="flex justify-between items-center">
-            <span className="flex items-center space-x-1 text-slate-400">
-              <Calendar className="w-3 h-3" />
-              <span>Ngày mở sổ:</span>
+            <span className="text-slate-400 flex items-center space-x-1">
+              <Calendar className="w-3 h-3 text-slate-500" />
+              <span>Ngày gửi:</span>
             </span>
-            <span className="text-slate-300">{formatTimestamp(startAt)}</span>
+            <span className="text-slate-300 font-mono">{formatTimestamp(startAt)}</span>
           </div>
 
           <div className="flex justify-between items-center">
-            <span className="flex items-center space-x-1 text-slate-400">
-              <Calendar className="w-3 h-3" />
+            <span className="text-slate-400 flex items-center space-x-1">
+              <Calendar className="w-3 h-3 text-slate-500" />
               <span>Ngày đáo hạn:</span>
             </span>
-            <span className="text-slate-200 font-semibold">{formatTimestamp(maturityAt)}</span>
+            <span className="text-slate-200 font-semibold font-mono">{formatTimestamp(maturityAt)}</span>
           </div>
 
           {isActive && (
@@ -288,12 +440,99 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
               <span className="text-slate-300 font-medium">Thời gian còn lại:</span>
               <span
                 className={`font-semibold ${
-                  isMatured ? 'text-emerald-400 flex items-center space-x-1' : 'text-amber-400 font-mono tabular-nums'
+                  isMatured
+                    ? 'text-emerald-400 flex items-center space-x-1'
+                    : 'text-amber-400 font-mono tabular-nums'
                 }`}
               >
                 {isMatured && <Sparkles className="w-3.5 h-3.5" />}
                 <span>{formatCountdown(maturityAt, currentSimulatedTime)}</span>
               </span>
+            </div>
+          )}
+        </div>
+
+        {/* ============================================================ */}
+        {/* PHẦN 3: KHỐI TX HASH & LINK ETHERSCAN (PHỤC VỤ AUDIT & DEMO) */}
+        {/* ============================================================ */}
+        <div className="p-2.5 bg-slate-900/70 border border-slate-800/80 rounded-xl space-y-1.5 text-[11px]">
+          {/* Tx Mở Sổ */}
+          <div className="flex items-center justify-between">
+            <span className="text-slate-400 flex items-center space-x-1">
+              <FileCheck2 className="w-3.5 h-3.5 text-indigo-400" />
+              <span>Tx Mở Sổ:</span>
+            </span>
+            {openTxHash ? (
+              <div className="flex items-center space-x-1.5 font-mono">
+                <span className="text-slate-300 hover:text-white" title={openTxHash}>
+                  {shortenHash(openTxHash, 6, 4)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(openTxHash, `open-${depositId}`)}
+                  className="p-1 text-slate-400 hover:text-indigo-300 hover:bg-slate-800 rounded transition cursor-pointer"
+                  title="Sao chép TxHash"
+                >
+                  {copiedKey === `open-${depositId}` ? (
+                    <Check className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3 h-3" />
+                  )}
+                </button>
+                <a
+                  href={getExplorerTxUrl(openTxHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 text-slate-400 hover:text-indigo-300 hover:bg-slate-800 rounded transition cursor-pointer"
+                  title="Xem trên Sepolia Etherscan"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            ) : (
+              <span className="text-slate-500 font-mono italic text-[10px]">Chưa đồng bộ log</span>
+            )}
+          </div>
+
+          {/* Tx Tất Toán / Tái Tục (nếu đã kết thúc) */}
+          {settleTxHash && (
+            <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
+              <span className="text-slate-400 flex items-center space-x-1">
+                <Receipt className="w-3.5 h-3.5 text-emerald-400" />
+                <span>
+                  {isEarly
+                    ? 'Tx Rút Sớm:'
+                    : status === DepositStatus.Withdrawn
+                    ? 'Tx Đáo Hạn:'
+                    : 'Tx Tái Tục:'}
+                </span>
+              </span>
+              <div className="flex items-center space-x-1.5 font-mono">
+                <span className="text-slate-300 hover:text-white" title={settleTxHash}>
+                  {shortenHash(settleTxHash, 6, 4)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(settleTxHash, `settle-${depositId}`)}
+                  className="p-1 text-slate-400 hover:text-emerald-300 hover:bg-slate-800 rounded transition cursor-pointer"
+                  title="Sao chép TxHash"
+                >
+                  {copiedKey === `settle-${depositId}` ? (
+                    <Check className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3 h-3" />
+                  )}
+                </button>
+                <a
+                  href={getExplorerTxUrl(settleTxHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 text-slate-400 hover:text-emerald-300 hover:bg-slate-800 rounded transition cursor-pointer"
+                  title="Xem trên Sepolia Etherscan"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
             </div>
           )}
         </div>

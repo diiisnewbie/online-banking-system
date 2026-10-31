@@ -3,6 +3,7 @@ import { ethers } from 'ethers';
 import { DepositCertificate } from '../contracts/types';
 import { formatUnits6, formatBps } from '../utils/formatters';
 import { parseContractError } from '../utils/errors';
+import { saveCertificateTxInfo } from '../utils/txStorage';
 import { Modal } from './ui/Modal';
 import { Button } from './ui/Button';
 import { useToast } from './ui/ToastContext';
@@ -59,6 +60,13 @@ export const EarlyWithdrawModal: React.FC<EarlyWithdrawModalProps> = ({
 
       const receipt = await tx.wait();
       setTxStatus('success');
+
+      saveCertificateTxInfo(certificate.depositId.toString(), {
+        settleTxHash: receipt?.hash || tx.hash,
+        isEarly: true,
+        principalPaid: amountToUser.toString(),
+        penaltyDeducted: penalty.toString(),
+      });
 
       addToast(
         'warning',
