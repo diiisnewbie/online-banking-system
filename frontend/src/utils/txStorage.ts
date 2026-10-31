@@ -6,7 +6,9 @@
 export interface CertificateTxInfo {
   openTxHash?: string;
   settleTxHash?: string;
+  claimTxHash?: string;
   isEarly?: boolean;
+  isDeferred?: boolean;
   principalPaid?: string;
   interestPaid?: string;
   penaltyDeducted?: string;

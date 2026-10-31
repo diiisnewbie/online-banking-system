@@ -541,11 +541,38 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           {/* Form Rút Quỹ (Có Chốt Chặn Solvency Guard C2) */}
           <div className="space-y-2 pt-2 border-t border-slate-800/80">
-            <div className="flex justify-between text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
               <label className="font-semibold text-slate-300">Rút vốn khỏi Vault (Withdraw Vault):</label>
-              <span className="text-slate-400 text-[11px]">
-                Tối đa: <strong className="text-emerald-400 tabular-nums">{formatUnits6(maxSafeWithdraw)}</strong> USDC
-              </span>
+              <div className="flex items-center space-x-2 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const whole = maxSafeWithdraw / 1_000_000n;
+                    const frac = maxSafeWithdraw % 1_000_000n;
+                    const str = `${whole}.${frac.toString().padStart(6, '0')}`.replace(/\.?0+$/, '');
+                    setWithdrawAmountStr(str || '0');
+                  }}
+                  className="text-emerald-400 hover:text-emerald-300 underline font-medium cursor-pointer"
+                  title="Điền hạn mức rút tối đa để chừa lại đúng số dư cam kết totalCommitted"
+                >
+                  Rút Hết Vốn An Toàn ({formatUnits6(maxSafeWithdraw)} USDC)
+                </button>
+                <span className="text-slate-600">|</span>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const exceed = maxSafeWithdraw + 10_000_000n;
+                    const whole = exceed / 1_000_000n;
+                    const frac = exceed % 1_000_000n;
+                    const str = `${whole}.${frac.toString().padStart(6, '0')}`.replace(/\.?0+$/, '');
+                    setWithdrawAmountStr(str);
+                  }}
+                  className="text-rose-400 hover:text-rose-300 underline font-medium cursor-pointer"
+                  title="Điền vượt hạn mức an toàn để kiểm thử Solvency Guard"
+                >
+                  Thử Rút Lố (Test Solvency Guard)
+                </button>
+              </div>
             </div>
             <div className="flex space-x-2">
               <input
@@ -574,8 +601,8 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
                 Rút Vốn
               </Button>
             </div>
-            <p className="text-[11px] text-slate-500">
-              * Solvency Guard C2 sẽ tự động revert nếu số tiền rút làm giảm số dư Vault xuống thấp hơn tổng nghĩa vụ đã cam kết ({formatUnits6(committedInterest)} USDC).
+            <p className="text-[11px] text-slate-400">
+              * Solvency Guard C2: Vault đang cam kết trả lãi <strong className="text-amber-400 font-mono">{formatUnits6(committedInterest)} USDC</strong>. Khi bấm "Rút Hết Vốn An Toàn", Vault sẽ còn lại đúng số tiền cam kết này.
             </p>
           </div>
         </Card>

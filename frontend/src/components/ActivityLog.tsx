@@ -30,15 +30,43 @@ interface LogItem {
   txHash: string;
 }
 
+const getCachedLogs = (acc: string): LogItem[] => {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(`banking_activity_log_${acc.toLowerCase()}`);
+    return raw ? JSON.parse(raw) : [];
+  } catch {
+    return [];
+  }
+};
+
+const saveCachedLogs = (acc: string, items: LogItem[]) => {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(`banking_activity_log_${acc.toLowerCase()}`, JSON.stringify(items.slice(0, 100)));
+  } catch {}
+};
+
 export const ActivityLog: React.FC<ActivityLogProps> = ({
   savingCore,
   account,
   refreshTrigger,
 }) => {
-  const [logs, setLogs] = useState<LogItem[]>([]);
+  const [logs, setLogs] = useState<LogItem[]>(() => (account ? getCachedLogs(account) : []));
   const [isLoading, setIsLoading] = useState<boolean>(false);
 
   useEffect(() => {
+    if (account) {
+      const cached = getCachedLogs(account);
+      if (cached.length > 0) {
+        setLogs(cached);
+      }
+    }
+  }, [account]);
+
+  useEffect(() => {
+    let isCancelled = false;
+
     const fetchLogs = async () => {
       if (!savingCore || !account) {
         setLogs([]);
@@ -59,6 +87,8 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
             savingCore.queryFilter(savingCore.filters.InterestDeferred(null, account), fromBlock).catch(() => []),
             savingCore.queryFilter(savingCore.filters.PenaltyCharged(null, null), fromBlock).catch(() => []),
           ]);
+
+        if (isCancelled) return;
 
         const items: LogItem[] = [];
 
@@ -127,7 +157,7 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
             type: 'deferred',
             depositId: ev.args.depositId.toString(),
             title: `Hoãn trả lãi (C1 Ghi Nợ) NFT #${ev.args.depositId.toString()}`,
-            amount: `+${formatUnits6(BigInt(ev.args.amount))} USDC (Nợ)`,
+            amount: `+${formatUnits6(BigInt(ev.args.amount))} USDC (Ghi Nợ)`,
             blockNumber: ev.blockNumber,
             txHash: ev.transactionHash,
           });
@@ -146,17 +176,36 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
           });
         }
 
-        // Sắp xếp theo block giảm dần
-        items.sort((a, b) => b.blockNumber - a.blockNumber);
-        setLogs(items);
+        // Hợp nhất dữ liệu mới với dữ liệu cache cũ để không bị mất log nếu RPC trả về thiếu
+        const existingCached = getCachedLogs(account);
+        const map = new Map<string, LogItem>();
+        existingCached.forEach((it) => map.set(it.id, it));
+        items.forEach((it) => map.set(it.id, it));
+
+        const mergedItems = Array.from(map.values());
+        mergedItems.sort((a, b) => b.blockNumber - a.blockNumber);
+
+        if (!isCancelled) {
+          if (mergedItems.length > 0) {
+            setLogs(mergedItems);
+            saveCachedLogs(account, mergedItems);
+          }
+        }
       } catch (err) {
-        console.warn('Lỗi đọc logs activity:', err);
+        console.warn('Lỗi đọc logs activity từ RPC:', err);
+        // Nếu lỗi RPC, giữ nguyên logs cache đã có thay vì xoá sạch
       } finally {
-        setIsLoading(false);
+        if (!isCancelled) {
+          setIsLoading(false);
+        }
       }
     };
 
     fetchLogs();
+
+    return () => {
+      isCancelled = true;
+    };
   }, [savingCore, account, refreshTrigger]);
 
   return (

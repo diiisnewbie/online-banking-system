@@ -28,7 +28,9 @@ export interface DepositCertificate {
   // Metadata mở rộng hỗ trợ Audit & Demo Etherscan
   openTxHash?: string;
   settleTxHash?: string;
+  claimTxHash?: string;
   isEarly?: boolean;
+  isDeferred?: boolean;
   principalPaid?: bigint;
   interestPaid?: bigint;
   penaltyDeducted?: bigint;

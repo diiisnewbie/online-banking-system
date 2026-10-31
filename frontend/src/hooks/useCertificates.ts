@@ -45,7 +45,9 @@ export function useCertificates(
           status: Number(c.status),
           openTxHash: cached?.openTxHash,
           settleTxHash: cached?.settleTxHash,
+          claimTxHash: cached?.claimTxHash,
           isEarly: cached?.isEarly,
+          isDeferred: cached?.isDeferred,
           principalPaid: cached?.principalPaid ? BigInt(cached.principalPaid) : undefined,
           interestPaid: cached?.interestPaid ? BigInt(cached.interestPaid) : undefined,
           penaltyDeducted: cached?.penaltyDeducted ? BigInt(cached.penaltyDeducted) : undefined,
@@ -82,10 +84,12 @@ export function useCertificates(
           const currentBlock = await savingCore.runner?.provider?.getBlockNumber();
           const fromBlock = currentBlock ? Math.max(0, currentBlock - 20000) : 0;
 
-          const [openEvents, withdrawEvents, renewEvents] = await Promise.all([
+          const [openEvents, withdrawEvents, renewEvents, claimEvents, deferredEvents] = await Promise.all([
             savingCore.queryFilter(savingCore.filters.DepositOpened(null, account), fromBlock).catch(() => []),
             savingCore.queryFilter(savingCore.filters.Withdrawn(null, account), fromBlock).catch(() => []),
             savingCore.queryFilter(savingCore.filters.Renewed(null, null), fromBlock).catch(() => []),
+            savingCore.queryFilter(savingCore.filters.InterestClaimed(null, account), fromBlock).catch(() => []),
+            savingCore.queryFilter(savingCore.filters.InterestDeferred(null, account), fromBlock).catch(() => []),
           ]);
 
           let hasUpdates = false;
@@ -103,6 +107,26 @@ export function useCertificates(
               hasUpdates = true;
             }
 
+            // Tìm deferred event (C1)
+            const defEv: any = (deferredEvents as any[]).find(
+              (ev) => ev.args && ev.args.depositId && ev.args.depositId.toString() === idStr
+            );
+            if (defEv) {
+              cert.isDeferred = true;
+              saveCertificateTxInfo(idStr, { isDeferred: true });
+              hasUpdates = true;
+            }
+
+            // Tìm claim event (C1)
+            const clmEv: any = (claimEvents as any[]).find(
+              (ev) => ev.args && ev.args.depositId && ev.args.depositId.toString() === idStr
+            );
+            if (clmEv && clmEv.transactionHash) {
+              cert.claimTxHash = clmEv.transactionHash;
+              saveCertificateTxInfo(idStr, { claimTxHash: clmEv.transactionHash });
+              hasUpdates = true;
+            }
+
             // Tìm withdraw event
             const withEv: any = (withdrawEvents as any[]).find(
               (ev) => ev.args && ev.args.depositId && ev.args.depositId.toString() === idStr
@@ -112,9 +136,11 @@ export function useCertificates(
               const pPaid = BigInt(withEv.args.principal);
               const iPaid = BigInt(withEv.args.interest);
               const penalty = isEarly ? (cert.principal * cert.penaltyBpsAtOpen) / 10000n : 0n;
+              const isDef = !isEarly && iPaid === 0n;
 
               cert.settleTxHash = withEv.transactionHash;
               cert.isEarly = isEarly;
+              if (isDef) cert.isDeferred = true;
               cert.principalPaid = pPaid;
               cert.interestPaid = iPaid;
               cert.penaltyDeducted = penalty;
@@ -122,6 +148,7 @@ export function useCertificates(
               saveCertificateTxInfo(idStr, {
                 settleTxHash: withEv.transactionHash,
                 isEarly,
+                isDeferred: isDef || cert.isDeferred,
                 principalPaid: pPaid.toString(),
                 interestPaid: iPaid.toString(),
                 penaltyDeducted: penalty.toString(),

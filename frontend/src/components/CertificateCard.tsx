@@ -80,7 +80,9 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
     status,
     openTxHash,
     settleTxHash,
+    claimTxHash,
     isEarly,
+    isDeferred,
     principalPaid,
     interestPaid,
     renewedToDepositId,
@@ -88,6 +90,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
 
   const isActive = status === DepositStatus.Active;
   const isMatured = currentSimulatedTime >= maturityAt;
+  const isC1Deferred = !isEarly && (Boolean(isDeferred) || unpaidInterest > 0n || (interestPaid !== undefined && interestPaid === 0n));
 
   // Tên gói tương ứng
   const planInfo = plans.find((p) => p.planId === planId);
@@ -129,6 +132,11 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
     try {
       const tx = await savingCore.claimPendingInterest(depositId);
       const receipt = await tx.wait();
+
+      saveCertificateTxInfo(depositId.toString(), {
+        claimTxHash: receipt?.hash || tx.hash,
+      });
+
       addToast(
         'success',
         `Nhận nợ lãi thành công trọn vẹn (+${formatUnits6(unpaidInterest)} USDC)!`,
@@ -240,6 +248,10 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
               <Badge variant="danger" size="md">
                 ⚠️ Rút Trước Hạn (-5%)
               </Badge>
+            ) : isC1Deferred ? (
+              <Badge variant="warning" size="md">
+                ⚡ Nhận Gốc (Hoãn Lãi C1)
+              </Badge>
             ) : (
               <Badge variant="success" size="md">
                 ✓ Đã Đáo Hạn
@@ -298,8 +310,50 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
                     * Tiền phạt {formatUnits6(calculatedPenalty)} USDC đã nộp trực tiếp vào Quỹ feeReceiver.
                   </div>
                 </div>
+              ) : isC1Deferred ? (
+                // 1B. KẾT TOÁN RÚT ĐÚNG HẠN NHƯNG HOÃN TRẢ LÃI C1
+                <div className="p-3 bg-amber-950/30 border border-amber-800/60 rounded-xl space-y-2 text-xs">
+                  <div className="flex items-center justify-between text-amber-300 font-bold border-b border-amber-900/60 pb-1.5">
+                    <span className="flex items-center space-x-1">
+                      <Receipt className="w-3.5 h-3.5 text-amber-400" />
+                      <span>Biên Lai Hoãn Lãi C1 (Principal Safe)</span>
+                    </span>
+                    <span className="text-[10px] text-amber-400 uppercase font-mono">
+                      {unpaidInterest > 0n ? 'Lãi Đang Ghi Nợ' : 'Đã Claim Đủ'}
+                    </span>
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 text-[11px]">
+                    <div>
+                      <span className="text-slate-400">Tiền gốc hoàn trả:</span>
+                      <div className="font-mono font-bold text-slate-200">
+                        {formatUnits6(principal)} USDC (Đã nhận)
+                      </div>
+                    </div>
+                    <div>
+                      <span className="text-amber-400">Lãi ghi nợ C1:</span>
+                      <div className="font-mono font-bold text-amber-300">
+                        +{formatUnits6(plannedInterest)} USDC
+                      </div>
+                    </div>
+                  </div>
+                  <div className="pt-1.5 border-t border-amber-900/40 text-[11px] space-y-1">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className="text-slate-300 font-semibold">Tình trạng thanh toán:</span>
+                      <span className="font-mono font-bold text-amber-300">
+                        {unpaidInterest > 0n ? (
+                          <span>Đã nhận 100% gốc — Đang nợ lãi</span>
+                        ) : (
+                          <span className="text-emerald-400">Đã nhận đủ cả gốc và nợ lãi</span>
+                        )}
+                      </span>
+                    </div>
+                    <div className="text-[10px] text-slate-400 italic">
+                      * Cơ chế C1: Ngay cả khi Vault cạn quỹ lãi, 100% tiền gốc của bạn vẫn được rút về an toàn, tiền lãi được bảo lưu on-chain.
+                    </div>
+                  </div>
+                </div>
               ) : (
-                // 1B. KẾT TOÁN RÚT ĐÚNG HẠN (ĐÁO HẠN HOÀN TOÀN)
+                // 1C. KẾT TOÁN RÚT ĐÚNG HẠN (ĐÁO HẠN HOÀN TOÀN)
                 <div className="p-3 bg-emerald-950/30 border border-emerald-800/60 rounded-xl space-y-2 text-xs">
                   <div className="flex items-center justify-between text-emerald-300 font-bold border-b border-emerald-900/60 pb-1.5">
                     <span className="flex items-center space-x-1">
@@ -502,8 +556,12 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
                 <span>
                   {isEarly
                     ? 'Tx Rút Sớm:'
+                    : isC1Deferred
+                    ? 'Tx Rút Gốc (C1):'
                     : status === DepositStatus.Withdrawn
                     ? 'Tx Đáo Hạn:'
+                    : status === DepositStatus.AutoRenewed
+                    ? 'Tx Auto-Renew:'
                     : 'Tx Tái Tục:'}
                 </span>
               </span>
@@ -528,6 +586,42 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
                   target="_blank"
                   rel="noopener noreferrer"
                   className="p-1 text-slate-400 hover:text-emerald-300 hover:bg-slate-800 rounded transition cursor-pointer"
+                  title="Xem trên Sepolia Etherscan"
+                >
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              </div>
+            </div>
+          )}
+
+          {/* Tx Claim Nợ Lãi C1 (nếu có phát sinh claim) */}
+          {claimTxHash && (
+            <div className="flex items-center justify-between pt-1 border-t border-slate-800/60">
+              <span className="text-slate-400 flex items-center space-x-1">
+                <Gift className="w-3.5 h-3.5 text-amber-400" />
+                <span>Tx Claim Nợ Lãi (C1):</span>
+              </span>
+              <div className="flex items-center space-x-1.5 font-mono">
+                <span className="text-slate-300 hover:text-white" title={claimTxHash}>
+                  {shortenHash(claimTxHash, 6, 4)}
+                </span>
+                <button
+                  type="button"
+                  onClick={() => handleCopy(claimTxHash, `claim-${depositId}`)}
+                  className="p-1 text-slate-400 hover:text-amber-300 hover:bg-slate-800 rounded transition cursor-pointer"
+                  title="Sao chép TxHash"
+                >
+                  {copiedKey === `claim-${depositId}` ? (
+                    <Check className="w-3 h-3 text-emerald-400" />
+                  ) : (
+                    <Copy className="w-3 h-3" />
+                  )}
+                </button>
+                <a
+                  href={getExplorerTxUrl(claimTxHash)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="p-1 text-slate-400 hover:text-amber-300 hover:bg-slate-800 rounded transition cursor-pointer"
                   title="Xem trên Sepolia Etherscan"
                 >
                   <ExternalLink className="w-3 h-3" />
