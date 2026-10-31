@@ -43,3 +43,4 @@ export function getSingleCertificateTxInfo(depositId: string): CertificateTxInfo
   const cache = getCertificateTxCache();
   return cache[depositId];
 }
+

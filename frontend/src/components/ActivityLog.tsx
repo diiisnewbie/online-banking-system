@@ -50,13 +50,14 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
         const fromBlock = currentBlock ? Math.max(0, currentBlock - 10000) : 0;
 
         // Query events from SavingCore
-        const [openEvents, withdrawEvents, renewEvents, claimEvents, deferredEvents] =
+        const [openEvents, withdrawEvents, renewEvents, claimEvents, deferredEvents, penaltyEvents] =
           await Promise.all([
             savingCore.queryFilter(savingCore.filters.DepositOpened(null, account), fromBlock).catch(() => []),
             savingCore.queryFilter(savingCore.filters.Withdrawn(null, account), fromBlock).catch(() => []),
             savingCore.queryFilter(savingCore.filters.Renewed(null, null), fromBlock).catch(() => []),
             savingCore.queryFilter(savingCore.filters.InterestClaimed(null, account), fromBlock).catch(() => []),
             savingCore.queryFilter(savingCore.filters.InterestDeferred(null, account), fromBlock).catch(() => []),
+            savingCore.queryFilter(savingCore.filters.PenaltyCharged(null, null), fromBlock).catch(() => []),
           ]);
 
         const items: LogItem[] = [];
@@ -76,18 +77,31 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
 
         // 2. Withdrawn events
         for (const ev of withdrawEvents as any[]) {
-          const isEarly = ev.args.isEarly;
+          const isEarly = Boolean(ev.args.isEarly);
           const interest = BigInt(ev.args.interest);
           const principal = BigInt(ev.args.principal);
+
+          let displayAmount = `+${formatUnits6(principal + interest)} USDC`;
+          let displayTitle = `Rút đúng hạn NFT #${ev.args.depositId.toString()} (+${formatUnits6(interest)} USDC lãi)`;
+
+          if (isEarly) {
+            // Tìm sự kiện phạt tương ứng để trừ chính xác
+            const matchedPenalty = (penaltyEvents as any[]).find(
+              (p) => p.args && p.args.depositId && p.args.depositId.toString() === ev.args.depositId.toString()
+            );
+            const penalty = matchedPenalty ? BigInt(matchedPenalty.args.penalty) : (principal * 500n) / 10000n;
+            const actualReceived = principal > penalty ? principal - penalty : 0n;
+
+            displayTitle = `Rút trước hạn NFT #${ev.args.depositId.toString()} (Phạt: -${formatUnits6(penalty)} USDC)`;
+            displayAmount = `+${formatUnits6(actualReceived)} USDC`;
+          }
 
           items.push({
             id: `withdrawn-${ev.transactionHash}-${ev.args.depositId}`,
             type: isEarly ? 'early' : 'withdraw',
             depositId: ev.args.depositId.toString(),
-            title: isEarly
-              ? `Rút trước hạn NFT #${ev.args.depositId.toString()} (Phạt 5% gốc)`
-              : `Rút đúng hạn NFT #${ev.args.depositId.toString()} (+${formatUnits6(interest)} USDC lãi)`,
-            amount: `+${formatUnits6(principal + interest)} USDC`,
+            title: displayTitle,
+            amount: displayAmount,
             blockNumber: ev.blockNumber,
             txHash: ev.transactionHash,
           });

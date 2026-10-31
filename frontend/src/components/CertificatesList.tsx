@@ -4,7 +4,8 @@ import { DepositCertificate, DepositStatus, SavingPlan } from '../contracts/type
 import { CertificateCard } from './CertificateCard';
 import { CardSkeleton } from './ui/Skeleton';
 import { Button } from './ui/Button';
-import { FolderCheck, History, PlusCircle, AlertTriangle, FastForward, RefreshCw } from 'lucide-react';
+import { FolderCheck, History, PlusCircle, AlertTriangle, FastForward, RefreshCw, Bot } from 'lucide-react';
+import { PublicAutoRenewModal } from './PublicAutoRenewModal';
 
 interface CertificatesListProps {
   certificates: DepositCertificate[];
@@ -47,6 +48,7 @@ export const CertificatesList: React.FC<CertificatesListProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'active' | 'history'>('active');
   const [isRefreshing, setIsRefreshing] = useState(false);
+  const [isPublicAutoRenewOpen, setIsPublicAutoRenewOpen] = useState(false);
 
   const handleManualRefresh = async () => {
     if (onRefreshAll && !isRefreshing) {
@@ -135,6 +137,16 @@ export const CertificatesList: React.FC<CertificatesListProps> = ({
               Làm Mới
             </Button>
           )}
+
+          <Button
+            variant="outline"
+            size="sm"
+            icon={<Bot className="w-3.5 h-3.5 text-sky-400" />}
+            onClick={() => setIsPublicAutoRenewOpen(true)}
+            className="text-sky-300 border-sky-800/60 hover:bg-sky-950/40"
+          >
+            Bot Keeper (Auto-Renew)
+          </Button>
 
           <Button
             variant="primary"
@@ -239,6 +251,17 @@ export const CertificatesList: React.FC<CertificatesListProps> = ({
           </p>
         </div>
       )}
+
+      {/* Modal Kích Hoạt Auto-Renew Công Khai (Keeper Tool) */}
+      <PublicAutoRenewModal
+        isOpen={isPublicAutoRenewOpen}
+        onClose={() => setIsPublicAutoRenewOpen(false)}
+        savingCore={savingCore}
+        vault={vault}
+        currentSimulatedTime={currentSimulatedTime}
+        gracePeriod={gracePeriod}
+        onSuccess={onSuccess}
+      />
     </div>
   );
 };
