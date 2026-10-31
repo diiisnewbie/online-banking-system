@@ -53,6 +53,7 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
     error InsufficientVaultLiquidity();
     error ClaimNotCovered();
     error NoPendingInterest();
+    error TransferDisabledForClosedCertificate();
 
     // --- Events ---
     event PlanCreated(uint256 indexed planId, uint256 tenorDays, uint256 aprBps);
@@ -460,5 +461,19 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
             uint256 depositId = tokenOfOwnerByIndex(account, i);
             certs[i] = certificates[depositId];
         }
+    }
+
+    /// @notice Hook chan chuyen nhuong NFT neu so da tat toan va khong con no lai C1
+    /// @dev Ngan chan 100% hanh vi dem NFT da rut het tien di ban/lua dao tren MetaMask hoac OpenSea
+    function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
+        address from = _ownerOf(tokenId);
+        if (from != address(0) && to != address(0)) {
+            DepositCertificate storage cert = certificates[tokenId];
+            bool hasPendingInterest = (unpaidInterest[tokenId] > 0);
+            if (cert.status != DepositStatus.Active && !hasPendingInterest) {
+                revert TransferDisabledForClosedCertificate();
+            }
+        }
+        return super._update(to, tokenId, auth);
     }
 }

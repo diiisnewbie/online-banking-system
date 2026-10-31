@@ -58,5 +58,13 @@ export default buildModule("BankingSystemSepolia", (m) => {
     { id: "createPlan180Days", after: [plan1] }
   );
 
+  // 5. Seed Plan 3 (1 Phut, 2.25% APR) voi customTimeUnit = 60s de demo Sepolia nhanh
+  const plan3 = m.call(
+    core,
+    "createPlanWithCustomUnit",
+    [1n, 225n, 10_000_000n, 100_000_000_000n, 500n, 60n], // 1 phut, 2.25% APR, timeUnit = 60s
+    { id: "createPlan1Min", after: [plan2] }
+  );
+
   return { usdc, vault, core };
 });

@@ -1,6 +1,6 @@
 // Địa chỉ hợp đồng SavingCore hỗ trợ cả Sepolia Testnet và Hardhat Localhost
 export const SEPOLIA_SAVING_CORE =
-  import.meta.env.VITE_SAVING_CORE_ADDRESS || '0xd62452220365fE9b42f8C6634A5d4b0A2E9AE83D';
+  import.meta.env.VITE_SAVING_CORE_ADDRESS || '0x62f1CC1Bd6fB7802109BcC419801f82D8E847607';
 export const LOCAL_SAVING_CORE = '0x5FC8d32690cc91D4c39d9d3abcBD16989F875707';
 
 export function getSavingCoreAddress(chainId?: number | null): string {
