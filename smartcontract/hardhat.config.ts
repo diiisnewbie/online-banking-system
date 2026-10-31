@@ -69,7 +69,7 @@ export default defineConfig({
   },
   verify: {
     etherscan: {
-      apiKey: configVariable("ETHERSCAN_API_KEY"),
+      apiKey: process.env.ETHERSCAN_API_KEY || configVariable("ETHERSCAN_API_KEY"),
     },
   },
 });
