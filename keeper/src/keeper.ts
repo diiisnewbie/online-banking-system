@@ -118,9 +118,11 @@ export class AutoRenewKeeper {
         }
 
         const maturityAt = BigInt(cert.maturityAt);
-        const eligibleAt = maturityAt + gracePeriod;
+        const planGraceBn = await this.savingCore.getPlanGracePeriod(cert.planId).catch(() => gracePeriod);
+        const certGrace = BigInt(planGraceBn);
+        const eligibleAt = maturityAt + certGrace;
 
-        // Check if eligible for Auto-Renew (block.timestamp >= maturityAt + gracePeriod)
+        // Check if eligible for Auto-Renew (block.timestamp >= maturityAt + planGrace)
         if (currentBlockTimestamp >= eligibleAt) {
           const overdueSeconds = Number(currentBlockTimestamp - eligibleAt);
           const overdueHours = (overdueSeconds / 3600).toFixed(1);
@@ -129,7 +131,7 @@ export class AutoRenewKeeper {
           console.log(`   • Owner:         ${await this.savingCore.ownerOf(depositId)}`);
           console.log(`   • Principal:     ${ethers.formatUnits(cert.principal, 6)} USDC`);
           console.log(`   • Maturity At:   ${new Date(Number(maturityAt) * 1000).toLocaleString('vi-VN')}`);
-          console.log(`   • Grace Period:  ${Number(gracePeriod) / 86400} days`);
+          console.log(`   • Grace Period:  ${Number(certGrace)}s (~${(Number(certGrace) / 86400).toFixed(2)} days)`);
           console.log(`   • EVM Clock:     ${blockDateStr}`);
           console.log(`   • Overdue by:    ${overdueHours} hours (Backdate applies)`);
 
