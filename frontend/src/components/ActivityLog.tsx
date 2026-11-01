@@ -124,6 +124,10 @@ export const ActivityLog: React.FC<ActivityLogProps> = ({
 
             displayTitle = `Rút trước hạn NFT #${ev.args.depositId.toString()} (Phạt: -${formatUnits6(penalty)} USDC)`;
             displayAmount = `+${formatUnits6(actualReceived)} USDC`;
+          } else if (interest === 0n) {
+            // C1 Case: Rút đúng hạn nhận đủ gốc, hoãn trả lãi do Vault thiếu thanh khoản
+            displayTitle = `Rút đúng hạn NFT #${ev.args.depositId.toString()} (Đã nhận 100% gốc — Hoãn trả lãi C1)`;
+            displayAmount = `+${formatUnits6(principal)} USDC (Gốc)`;
           }
 
           items.push({

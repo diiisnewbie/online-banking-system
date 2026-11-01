@@ -510,11 +510,27 @@ export const AdminPanel: React.FC<AdminPanelProps> = ({
 
           {/* Form Nạp Quỹ */}
           <div className="space-y-2">
-            <div className="flex justify-between text-xs">
+            <div className="flex flex-wrap items-center justify-between gap-1 text-xs">
               <label className="font-semibold text-slate-300">Nạp thêm vốn vào Vault (Fund Vault):</label>
-              <span className="text-slate-400 text-[11px]">
-                Ví của bạn: <strong className="text-slate-200 tabular-nums">{formatUnits6(userUsdcBalance)}</strong> USDC
-              </span>
+              <div className="flex items-center space-x-2 text-[11px]">
+                <button
+                  type="button"
+                  onClick={() => {
+                    const whole = committedInterest / 1_000_000n;
+                    const frac = committedInterest % 1_000_000n;
+                    const str = `${whole}.${frac.toString().padStart(6, '0')}`.replace(/\.?0+$/, '');
+                    setFundAmountStr(str || '0');
+                  }}
+                  className="text-indigo-400 hover:text-indigo-300 underline font-medium cursor-pointer"
+                  title="Điền số vốn đúng bằng committedInterest"
+                >
+                  Nạp Bằng Total Committed ({formatUnits6(committedInterest)} USDC)
+                </button>
+                <span className="text-slate-600">|</span>
+                <span className="text-slate-400 text-[11px]">
+                  Ví: <strong className="text-slate-200 tabular-nums">{formatUnits6(userUsdcBalance)}</strong> USDC
+                </span>
+              </div>
             </div>
             <div className="flex space-x-2">
               <input

@@ -463,11 +463,14 @@ contract SavingCore is ISavingCore, ERC721Enumerable, Ownable, ReentrancyGuard {
         }
     }
 
-    /// @notice Hook chan chuyen nhuong NFT neu so da tat toan va khong con no lai C1
-    /// @dev Ngan chan 100% hanh vi dem NFT da rut het tien di ban/lua dao tren MetaMask hoac OpenSea
+    /// @notice Hook chan chuyen nhuong NFT:
+    /// 1. Dong bang toan bo chuyen nhuong khi he thong tam dung khan cap (Circuit Breaker)
+    /// 2. Chan chuyen nhuong neu so da tat toan va khong con no lai C1
     function _update(address to, uint256 tokenId, address auth) internal override returns (address) {
         address from = _ownerOf(tokenId);
         if (from != address(0) && to != address(0)) {
+            if (vault.paused()) revert SystemPaused();
+
             DepositCertificate storage cert = certificates[tokenId];
             bool hasPendingInterest = (unpaidInterest[tokenId] > 0);
             if (cert.status != DepositStatus.Active && !hasPendingInterest) {

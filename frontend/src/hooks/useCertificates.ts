@@ -72,6 +72,15 @@ export function useCertificates(
         debts[id] = debt;
       });
 
+      // Nếu sổ đang có nợ lãi C1 on-chain, chắc chắn 100% là rút đúng hạn hoãn lãi, không phải isEarly!
+      parsedCerts.forEach((cert) => {
+        const idStr = cert.depositId.toString();
+        if (debts[idStr] && debts[idStr] > 0n) {
+          cert.isEarly = false;
+          cert.isDeferred = true;
+        }
+      });
+
       // Sắp xếp chứng chỉ mới nhất lên đầu
       parsedCerts.sort((a, b) => Number(b.depositId - a.depositId));
 

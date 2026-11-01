@@ -133,5 +133,31 @@ describe("Phase 5 -- Edge Cases & Boundary Error Coverage Suite", function () {
     await expect(core.connect(user).renewDeposit(1, 1))
       .to.be.revertedWithCustomError(core, "InvalidDepositAmount");
   });
+
+  it("EC-07 -- transferFrom reverts SystemPaused when Vault is paused", async function () {
+    const { core, vault, deployer, user } = await networkHelpers.loadFixture(deployFixture);
+    await core.connect(user).openDeposit(0, 100_000_000n); // Deposit ID 1
+
+    // Admin pauses Vault
+    await vault.connect(deployer).pause();
+
+    // User attempts to transfer NFT #1 to deployer
+    await expect(
+      core.connect(user).transferFrom(user.address, deployer.address, 1)
+    ).to.be.revertedWithCustomError(core, "SystemPaused");
+  });
+
+  it("EC-08 -- transferFrom reverts TransferDisabledForClosedCertificate when withdrawn and no debt", async function () {
+    const { core, deployer, user } = await networkHelpers.loadFixture(deployFixture);
+    await core.connect(user).openDeposit(0, 100_000_000n); // Deposit ID 1
+
+    // Early withdraw cert 1
+    await core.connect(user).earlyWithdraw(1);
+
+    // Cert 1 is now Withdrawn and has 0 unpaid interest
+    await expect(
+      core.connect(user).transferFrom(user.address, deployer.address, 1)
+    ).to.be.revertedWithCustomError(core, "TransferDisabledForClosedCertificate");
+  });
 });
 

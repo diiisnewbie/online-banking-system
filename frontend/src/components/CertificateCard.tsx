@@ -90,7 +90,11 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
 
   const isActive = status === DepositStatus.Active;
   const isMatured = currentSimulatedTime >= maturityAt;
-  const isC1Deferred = !isEarly && (Boolean(isDeferred) || unpaidInterest > 0n || (interestPaid !== undefined && interestPaid === 0n));
+
+  // Neu co no lai on-chain (unpaidInterest > 0) hoac co flag isDeferred thi 100% la C1 tat toan dung han thieu Vault, tuyet doi khong phai isEarly!
+  const hasC1Debt = unpaidInterest > 0n || Boolean(isDeferred);
+  const effectiveIsEarly = hasC1Debt ? false : Boolean(isEarly);
+  const isC1Deferred = hasC1Debt || (!effectiveIsEarly && interestPaid !== undefined && interestPaid === 0n && status === DepositStatus.Withdrawn);
 
   // Tên gói tương ứng
   const planInfo = plans.find((p) => p.planId === planId);
@@ -205,7 +209,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
             ? isMatured
               ? 'bg-gradient-to-r from-emerald-500 to-teal-400'
               : 'bg-gradient-to-r from-indigo-500 to-indigo-400'
-            : isEarly
+            : effectiveIsEarly
             ? 'bg-gradient-to-r from-rose-500 to-amber-500'
             : status === DepositStatus.Withdrawn
             ? 'bg-gradient-to-r from-emerald-600 to-teal-600'
@@ -244,7 +248,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
               </Badge>
             )
           ) : status === DepositStatus.Withdrawn ? (
-            isEarly ? (
+            effectiveIsEarly ? (
               <Badge variant="danger" size="md">
                 ⚠️ Rút Trước Hạn (-5%)
               </Badge>
@@ -274,7 +278,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
         {!isActive && (
           <div className="space-y-2.5">
             {status === DepositStatus.Withdrawn ? (
-              isEarly ? (
+              effectiveIsEarly ? (
                 // 1A. KẾT TOÁN RÚT TRƯỚC HẠN
                 <div className="p-3 bg-rose-950/30 border border-rose-800/60 rounded-xl space-y-2 text-xs">
                   <div className="flex items-center justify-between text-rose-300 font-bold border-b border-rose-900/60 pb-1.5">
@@ -554,7 +558,7 @@ export const CertificateCard: React.FC<CertificateCardProps> = ({
               <span className="text-slate-400 flex items-center space-x-1">
                 <Receipt className="w-3.5 h-3.5 text-emerald-400" />
                 <span>
-                  {isEarly
+                  {effectiveIsEarly
                     ? 'Tx Rút Sớm:'
                     : isC1Deferred
                     ? 'Tx Rút Gốc (C1):'
